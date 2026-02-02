@@ -4,6 +4,7 @@ import (
 	"autostrike/internal/application"
 	"autostrike/internal/infrastructure/http/handlers"
 	"autostrike/internal/infrastructure/http/middleware"
+	"autostrike/internal/infrastructure/websocket"
 
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
@@ -21,6 +22,7 @@ func NewServer(
 	scenarioService *application.ScenarioService,
 	executionService *application.ExecutionService,
 	techniqueService *application.TechniqueService,
+	hub *websocket.Hub,
 	logger *zap.Logger,
 ) *Server {
 	gin.SetMode(gin.ReleaseMode)
@@ -35,6 +37,12 @@ func NewServer(
 	router.GET("/health", func(c *gin.Context) {
 		c.JSON(200, gin.H{"status": "ok"})
 	})
+
+	// WebSocket routes
+	if hub != nil {
+		wsHandler := handlers.NewWebSocketHandler(hub, agentService, logger)
+		wsHandler.RegisterRoutes(router)
+	}
 
 	// API v1 routes
 	api := router.Group("/api/v1")

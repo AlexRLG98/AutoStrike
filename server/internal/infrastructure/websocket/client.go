@@ -1,7 +1,9 @@
 package websocket
 
 import (
+	"context"
 	"encoding/json"
+	"sync"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -21,6 +23,7 @@ type Client struct {
 	conn     *websocket.Conn
 	send     chan []byte
 	agentPaw string
+	pawMu    sync.RWMutex
 	logger   *zap.Logger
 }
 
@@ -178,5 +181,19 @@ func (c *Client) Send(msgType string, payload interface{}) error {
 
 // GetAgentPaw returns the agent paw if this is an agent connection
 func (c *Client) GetAgentPaw() string {
+	c.pawMu.RLock()
+	defer c.pawMu.RUnlock()
 	return c.agentPaw
+}
+
+// SetAgentPaw sets the agent paw for this connection
+func (c *Client) SetAgentPaw(paw string) {
+	c.pawMu.Lock()
+	defer c.pawMu.Unlock()
+	c.agentPaw = paw
+}
+
+// Context returns a background context for database operations
+func (c *Client) Context() context.Context {
+	return context.Background()
 }

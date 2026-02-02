@@ -192,3 +192,109 @@ func TestConstants(t *testing.T) {
 		t.Error("maxMessageSize should be positive")
 	}
 }
+
+func TestClient_SetAgentPaw(t *testing.T) {
+	logger := zap.NewNop()
+	hub := NewHub(logger)
+
+	client := NewClient(hub, nil, "", logger)
+
+	if client.GetAgentPaw() != "" {
+		t.Error("Expected empty paw initially")
+	}
+
+	client.SetAgentPaw("new-agent-paw")
+
+	if client.GetAgentPaw() != "new-agent-paw" {
+		t.Errorf("Expected paw 'new-agent-paw', got '%s'", client.GetAgentPaw())
+	}
+}
+
+func TestClient_SetAgentPaw_Override(t *testing.T) {
+	logger := zap.NewNop()
+	hub := NewHub(logger)
+
+	client := NewClient(hub, nil, "initial-paw", logger)
+
+	if client.GetAgentPaw() != "initial-paw" {
+		t.Errorf("Expected initial paw 'initial-paw', got '%s'", client.GetAgentPaw())
+	}
+
+	client.SetAgentPaw("updated-paw")
+
+	if client.GetAgentPaw() != "updated-paw" {
+		t.Errorf("Expected updated paw 'updated-paw', got '%s'", client.GetAgentPaw())
+	}
+}
+
+func TestClient_Context(t *testing.T) {
+	logger := zap.NewNop()
+	hub := NewHub(logger)
+
+	client := NewClient(hub, nil, "test-paw", logger)
+
+	ctx := client.Context()
+
+	if ctx == nil {
+		t.Fatal("Context returned nil")
+	}
+
+	// Verify it's a valid context (should not be canceled)
+	select {
+	case <-ctx.Done():
+		t.Error("Context should not be done")
+	default:
+		// OK - context is not done
+	}
+}
+
+func TestClient_Context_MultipleCallsReturnValidContext(t *testing.T) {
+	logger := zap.NewNop()
+	hub := NewHub(logger)
+
+	client := NewClient(hub, nil, "test-paw", logger)
+
+	ctx1 := client.Context()
+	ctx2 := client.Context()
+
+	if ctx1 == nil || ctx2 == nil {
+		t.Fatal("Context should not return nil")
+	}
+
+	// Both should be valid contexts
+	if ctx1.Err() != nil {
+		t.Error("First context should not have error")
+	}
+	if ctx2.Err() != nil {
+		t.Error("Second context should not have error")
+	}
+}
+
+func TestNewClient_NilLogger(t *testing.T) {
+	hub := NewHub(zap.NewNop())
+
+	// Should not panic with nil logger
+	client := NewClient(hub, nil, "test-paw", nil)
+
+	if client == nil {
+		t.Fatal("NewClient returned nil")
+	}
+
+	if client.logger == nil {
+		t.Error("Logger should be set to nop logger when nil is passed")
+	}
+}
+
+func TestClient_Send_UnmarshalablePayload(t *testing.T) {
+	logger := zap.NewNop()
+	hub := NewHub(logger)
+
+	client := NewClient(hub, nil, "test-paw", logger)
+
+	// Create an unmarshalable payload (channel cannot be marshaled)
+	err := client.Send("test", make(chan int))
+
+	if err == nil {
+		t.Error("Expected error when sending unmarshalable payload")
+	}
+}

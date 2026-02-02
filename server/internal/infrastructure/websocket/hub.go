@@ -51,9 +51,10 @@ func (h *Hub) handleRegister(client *Client) {
 	defer h.mu.Unlock()
 
 	h.clients[client] = true
-	if client.agentPaw != "" {
-		h.agents[client.agentPaw] = client
-		h.logger.Info("Agent connected", zap.String("paw", client.agentPaw))
+	paw := client.GetAgentPaw()
+	if paw != "" {
+		h.agents[paw] = client
+		h.logger.Info("Agent connected", zap.String("paw", paw))
 	}
 }
 
@@ -64,9 +65,10 @@ func (h *Hub) handleUnregister(client *Client) {
 
 	if _, ok := h.clients[client]; ok {
 		delete(h.clients, client)
-		if client.agentPaw != "" {
-			delete(h.agents, client.agentPaw)
-			h.logger.Info("Agent disconnected", zap.String("paw", client.agentPaw))
+		paw := client.GetAgentPaw()
+		if paw != "" {
+			delete(h.agents, paw)
+			h.logger.Info("Agent disconnected", zap.String("paw", paw))
 		}
 		close(client.send)
 	}
@@ -83,8 +85,9 @@ func (h *Hub) handleBroadcast(message []byte) {
 		default:
 			close(client.send)
 			delete(h.clients, client)
-			if client.agentPaw != "" {
-				delete(h.agents, client.agentPaw)
+			paw := client.GetAgentPaw()
+			if paw != "" {
+				delete(h.agents, paw)
 			}
 		}
 	}
@@ -130,4 +133,14 @@ func (h *Hub) IsAgentConnected(paw string) bool {
 
 	_, ok := h.agents[paw]
 	return ok
+}
+
+// Register adds a client to the hub
+func (h *Hub) Register(client *Client) {
+	h.register <- client
+}
+
+// Unregister removes a client from the hub
+func (h *Hub) Unregister(client *Client) {
+	h.unregister <- client
 }

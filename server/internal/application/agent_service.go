@@ -95,3 +95,20 @@ func (s *AgentService) CheckStaleAgents(ctx context.Context, timeout time.Durati
 
 	return nil
 }
+
+// RegisterOrUpdate registers a new agent or updates an existing one (WebSocket handler)
+func (s *AgentService) RegisterOrUpdate(ctx context.Context, paw, hostname, username, platform string, executors []string) error {
+	agent := &entity.Agent{
+		Paw:       paw,
+		Hostname:  hostname,
+		Username:  username,
+		Platform:  platform,
+		Executors: executors,
+	}
+	return s.RegisterAgent(ctx, agent)
+}
+
+// UpdateHeartbeat updates the last seen timestamp for an agent (WebSocket handler)
+func (s *AgentService) UpdateHeartbeat(ctx context.Context, paw string) error {
+	return s.Heartbeat(ctx, paw)
+}

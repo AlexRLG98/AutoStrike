@@ -11,6 +11,7 @@ import (
 	"autostrike/internal/domain/service"
 	"autostrike/internal/infrastructure/api/rest"
 	"autostrike/internal/infrastructure/persistence/sqlite"
+	"autostrike/internal/infrastructure/websocket"
 
 	"github.com/spf13/viper"
 	"go.uber.org/zap"
@@ -70,12 +71,17 @@ func main() {
 	)
 	techniqueService := application.NewTechniqueService(techniqueRepo)
 
+	// Initialize WebSocket hub
+	hub := websocket.NewHub(logger)
+	go hub.Run()
+
 	// Initialize HTTP server
 	server := rest.NewServer(
 		agentService,
 		scenarioService,
 		executionService,
 		techniqueService,
+		hub,
 		logger,
 	)
 

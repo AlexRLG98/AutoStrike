@@ -2,6 +2,7 @@ package websocket
 
 import (
 	"testing"
+	"time"
 
 	"go.uber.org/zap"
 )
@@ -318,5 +319,143 @@ func TestHub_handleBroadcast(t *testing.T) {
 		}
 	default:
 		t.Error("client2: No message received")
+	}
+}
+
+func TestHub_Register_Channel(t *testing.T) {
+	logger := zap.NewNop()
+	hub := NewHub(logger)
+
+	// Start hub in background
+	go hub.Run()
+
+	client := &Client{
+		hub:      hub,
+		send:     make(chan []byte, 256),
+		agentPaw: "channel-test-agent",
+	}
+
+	// Use the public Register method
+	hub.Register(client)
+
+	// Wait for registration to be processed
+	time.Sleep(50 * time.Millisecond)
+
+	// Verify agent is connected
+	if !hub.IsAgentConnected("channel-test-agent") {
+		t.Error("Agent should be connected after Register")
+	}
+}
+
+func TestHub_Unregister_Channel(t *testing.T) {
+	logger := zap.NewNop()
+	hub := NewHub(logger)
+
+	// Start hub in background
+	go hub.Run()
+
+	client := &Client{
+		hub:      hub,
+		send:     make(chan []byte, 256),
+		agentPaw: "unregister-test-agent",
+	}
+
+	// Register first
+	hub.Register(client)
+	time.Sleep(50 * time.Millisecond)
+
+	if !hub.IsAgentConnected("unregister-test-agent") {
+		t.Fatal("Agent should be connected")
+	}
+
+	// Then unregister
+	hub.Unregister(client)
+	time.Sleep(50 * time.Millisecond)
+
+	if hub.IsAgentConnected("unregister-test-agent") {
+		t.Error("Agent should not be connected after Unregister")
+	}
+}
+
+func TestHub_Register_MultipleAgents(t *testing.T) {
+	logger := zap.NewNop()
+	hub := NewHub(logger)
+
+	go hub.Run()
+
+	clients := make([]*Client, 5)
+	for i := 0; i < 5; i++ {
+		clients[i] = &Client{
+			hub:      hub,
+			send:     make(chan []byte, 256),
+			agentPaw: "multi-agent-" + string(rune('A'+i)),
+		}
+		hub.Register(clients[i])
+	}
+
+	time.Sleep(100 * time.Millisecond)
+
+	agents := hub.GetConnectedAgents()
+	if len(agents) != 5 {
+		t.Errorf("Expected 5 agents, got %d", len(agents))
+	}
+}
+
+func TestHub_handleBroadcast_FullChannel(t *testing.T) {
+	logger := zap.NewNop()
+	hub := NewHub(logger)
+
+	// Create client with full send channel
+	client := &Client{
+		hub:      hub,
+		send:     make(chan []byte, 1),
+		agentPaw: "full-channel-agent",
+	}
+
+	hub.handleRegister(client)
+
+	// Fill the channel
+	client.send <- []byte("blocking message")
+
+	// Broadcast should remove client with full channel
+	hub.handleBroadcast([]byte("broadcast"))
+
+	// Client should be removed
+	if _, ok := hub.clients[client]; ok {
+		t.Error("Client with full channel should be removed")
+	}
+}
+
+func TestHub_ConcurrentAccess(t *testing.T) {
+	logger := zap.NewNop()
+	hub := NewHub(logger)
+
+	go hub.Run()
+
+	// Concurrent registration
+	done := make(chan bool, 10)
+	for i := 0; i < 10; i++ {
+		go func(id int) {
+			client := &Client{
+				hub:      hub,
+				send:     make(chan []byte, 256),
+				agentPaw: "concurrent-agent-" + string(rune('0'+id)),
+			}
+			hub.Register(client)
+			time.Sleep(10 * time.Millisecond)
+			hub.Unregister(client)
+			done <- true
+		}(i)
+	}
+
+	// Wait for all goroutines
+	for i := 0; i < 10; i++ {
+		<-done
+	}
+
+	// Hub should still work
+	agents := hub.GetConnectedAgents()
+	if agents == nil {
+		t.Error("GetConnectedAgents should not return nil")
 	}
 }

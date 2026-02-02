@@ -18,10 +18,13 @@ Thumbs.db
 
 # ===== Go =====
 server/bin/
+server/autostrike-server
 server/*.exe
 server/*.out
 server/coverage.out
 server/vendor/
+server/data/
+server/certs/
 
 # ===== Node.js / React =====
 dashboard/node_modules/

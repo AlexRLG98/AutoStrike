@@ -377,3 +377,160 @@ func TestCheckStaleAgents_UpdateError(t *testing.T) {
 		t.Fatal("Expected error")
 	}
 }
+
+// Tests for RegisterOrUpdate (WebSocket handler convenience method)
+
+func TestRegisterOrUpdate_NewAgent(t *testing.T) {
+	repo := newMockAgentRepo()
+	service := NewAgentService(repo)
+	ctx := context.Background()
+
+	err := service.RegisterOrUpdate(ctx, "ws-agent-1", "test-host", "testuser", "linux", []string{"sh", "bash"})
+	if err != nil {
+		t.Fatalf("Expected no error, got %v", err)
+	}
+
+	agent, err := repo.FindByPaw(ctx, "ws-agent-1")
+	if err != nil {
+		t.Fatalf("Agent not found: %v", err)
+	}
+
+	if agent.Hostname != "test-host" {
+		t.Errorf("Expected hostname 'test-host', got '%s'", agent.Hostname)
+	}
+
+	if agent.Username != "testuser" {
+		t.Errorf("Expected username 'testuser', got '%s'", agent.Username)
+	}
+
+	if agent.Platform != "linux" {
+		t.Errorf("Expected platform 'linux', got '%s'", agent.Platform)
+	}
+
+	if len(agent.Executors) != 2 {
+		t.Errorf("Expected 2 executors, got %d", len(agent.Executors))
+	}
+
+	if agent.Status != entity.AgentOnline {
+		t.Errorf("Expected status Online, got %v", agent.Status)
+	}
+}
+
+func TestRegisterOrUpdate_ExistingAgent(t *testing.T) {
+	repo := newMockAgentRepo()
+	existing := &entity.Agent{
+		Paw:       "ws-existing",
+		Hostname:  "old-host",
+		Username:  "olduser",
+		Platform:  "windows",
+		Status:    entity.AgentOffline,
+		Executors: []string{"powershell"},
+		LastSeen:  time.Now().Add(-1 * time.Hour),
+	}
+	repo.agents[existing.Paw] = existing
+
+	service := NewAgentService(repo)
+	ctx := context.Background()
+
+	err := service.RegisterOrUpdate(ctx, "ws-existing", "new-host", "newuser", "linux", []string{"sh"})
+	if err != nil {
+		t.Fatalf("Expected no error, got %v", err)
+	}
+
+	agent := repo.agents["ws-existing"]
+
+	if agent.Hostname != "new-host" {
+		t.Errorf("Expected hostname 'new-host', got '%s'", agent.Hostname)
+	}
+
+	if agent.Username != "newuser" {
+		t.Errorf("Expected username 'newuser', got '%s'", agent.Username)
+	}
+
+	if agent.Platform != "linux" {
+		t.Errorf("Expected platform 'linux', got '%s'", agent.Platform)
+	}
+
+	if agent.Status != entity.AgentOnline {
+		t.Errorf("Expected status Online, got %v", agent.Status)
+	}
+}
+
+func TestRegisterOrUpdate_EmptyExecutors(t *testing.T) {
+	repo := newMockAgentRepo()
+	service := NewAgentService(repo)
+	ctx := context.Background()
+
+	err := service.RegisterOrUpdate(ctx, "empty-exec-agent", "host", "user", "linux", []string{})
+	if err != nil {
+		t.Fatalf("Expected no error, got %v", err)
+	}
+
+	agent := repo.agents["empty-exec-agent"]
+	if len(agent.Executors) != 0 {
+		t.Errorf("Expected 0 executors, got %d", len(agent.Executors))
+	}
+}
+
+func TestRegisterOrUpdate_CreateError(t *testing.T) {
+	repo := newMockAgentRepo()
+	repo.createErr = errors.New("database error")
+
+	service := NewAgentService(repo)
+	ctx := context.Background()
+
+	err := service.RegisterOrUpdate(ctx, "error-agent", "host", "user", "linux", []string{"sh"})
+	if err == nil {
+		t.Fatal("Expected error")
+	}
+}
+
+// Tests for UpdateHeartbeat (WebSocket handler convenience method)
+
+func TestUpdateHeartbeat_Success(t *testing.T) {
+	repo := newMockAgentRepo()
+	repo.agents["heartbeat-agent"] = &entity.Agent{
+		Paw:      "heartbeat-agent",
+		LastSeen: time.Now().Add(-1 * time.Hour),
+	}
+
+	service := NewAgentService(repo)
+	ctx := context.Background()
+
+	oldLastSeen := repo.agents["heartbeat-agent"].LastSeen
+
+	err := service.UpdateHeartbeat(ctx, "heartbeat-agent")
+	if err != nil {
+		t.Fatalf("Expected no error, got %v", err)
+	}
+
+	newLastSeen := repo.agents["heartbeat-agent"].LastSeen
+	if !newLastSeen.After(oldLastSeen) {
+		t.Error("LastSeen should be updated")
+	}
+}
+
+func TestUpdateHeartbeat_Error(t *testing.T) {
+	repo := newMockAgentRepo()
+	repo.lastSeenErr = errors.New("database error")
+
+	service := NewAgentService(repo)
+	ctx := context.Background()
+
+	err := service.UpdateHeartbeat(ctx, "any-agent")
+	if err == nil {
+		t.Fatal("Expected error")
+	}
+}
+
+func TestUpdateHeartbeat_NonExistentAgent(t *testing.T) {
+	repo := newMockAgentRepo()
+	service := NewAgentService(repo)
+	ctx := context.Background()
+
+	// Should not error even for non-existent agent (per mock implementation)
+	err := service.UpdateHeartbeat(ctx, "non-existent")
+	if err != nil {
+		t.Fatalf("Expected no error, got %v", err)
+	}
+}

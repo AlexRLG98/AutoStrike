@@ -1,0 +1,104 @@
+- id: "T1082"
+  name: "System Information Discovery"
+  description: "Adversaries may attempt to get detailed information about the operating system and hardware."
+  tactic: "discovery"
+  platforms:
+    - "windows"
+    - "linux"
+  executors:
+    - type: "cmd"
+      command: "systeminfo"
+      platform: "windows"
+      timeout: 60
+    - type: "bash"
+      command: "uname -a && cat /etc/os-release"
+      platform: "linux"
+      timeout: 60
+  detection:
+    - source: "Process Creation"
+      indicator: "systeminfo.exe execution"
+  is_safe: true
+
+- id: "T1083"
+  name: "File and Directory Discovery"
+  description: "Adversaries may enumerate files and directories or may search in specific locations."
+  tactic: "discovery"
+  platforms:
+    - "windows"
+    - "linux"
+  executors:
+    - type: "cmd"
+      command: "dir C:\\Users"
+      platform: "windows"
+      timeout: 60
+    - type: "bash"
+      command: "ls -la /home"
+      platform: "linux"
+      timeout: 60
+  detection:
+    - source: "Process Creation"
+      indicator: "dir.exe or ls execution with sensitive paths"
+  is_safe: true
+
+- id: "T1057"
+  name: "Process Discovery"
+  description: "Adversaries may attempt to get information about running processes."
+  tactic: "discovery"
+  platforms:
+    - "windows"
+    - "linux"
+  executors:
+    - type: "cmd"
+      command: "tasklist"
+      platform: "windows"
+      timeout: 60
+    - type: "bash"
+      command: "ps aux"
+      platform: "linux"
+      timeout: 60
+  detection:
+    - source: "Process Creation"
+      indicator: "tasklist.exe or ps execution"
+  is_safe: true
+
+- id: "T1016"
+  name: "System Network Configuration Discovery"
+  description: "Adversaries may look for details about the network configuration."
+  tactic: "discovery"
+  platforms:
+    - "windows"
+    - "linux"
+  executors:
+    - type: "cmd"
+      command: "ipconfig /all"
+      platform: "windows"
+      timeout: 60
+    - type: "bash"
+      command: "ip addr && cat /etc/resolv.conf"
+      platform: "linux"
+      timeout: 60
+  detection:
+    - source: "Process Creation"
+      indicator: "ipconfig.exe or ip execution"
+  is_safe: true
+
+- id: "T1049"
+  name: "System Network Connections Discovery"
+  description: "Adversaries may attempt to get a listing of network connections."
+  tactic: "discovery"
+  platforms:
+    - "windows"
+    - "linux"
+  executors:
+    - type: "cmd"
+      command: "netstat -ano"
+      platform: "windows"
+      timeout: 60
+    - type: "bash"
+      command: "netstat -tunap || ss -tunap"
+      platform: "linux"
+      timeout: 60
+  detection:
+    - source: "Process Creation"
+      indicator: "netstat.exe or ss execution"
+  is_safe: true
