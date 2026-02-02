@@ -44,7 +44,7 @@ autostrike/
 | Component | Technology |
 |-----------|------------|
 | **Server** | Go 1.21, Gin, SQLite, WebSocket |
-| **Agent** | Rust 1.75+, tokio, tokio-tungstenite |
+| **Agent** | Rust 1.83+, tokio, tokio-tungstenite |
 | **Dashboard** | React 18, TypeScript, TailwindCSS, Vite |
 | **Documentation** | MkDocs Material |
 
