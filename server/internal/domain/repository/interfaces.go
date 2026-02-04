@@ -56,3 +56,14 @@ type ResultRepository interface {
 	FindResultsByExecution(ctx context.Context, executionID string) ([]*entity.ExecutionResult, error)
 	FindResultsByTechnique(ctx context.Context, techniqueID string) ([]*entity.ExecutionResult, error)
 }
+
+// UserRepository defines the interface for user persistence
+type UserRepository interface {
+	Create(ctx context.Context, user *entity.User) error
+	Update(ctx context.Context, user *entity.User) error
+	Delete(ctx context.Context, id string) error
+	FindByID(ctx context.Context, id string) (*entity.User, error)
+	FindByUsername(ctx context.Context, username string) (*entity.User, error)
+	FindByEmail(ctx context.Context, email string) (*entity.User, error)
+	FindAll(ctx context.Context) ([]*entity.User, error)
+}

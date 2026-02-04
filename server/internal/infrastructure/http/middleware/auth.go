@@ -47,10 +47,23 @@ func AuthMiddleware(config *AuthConfig) gin.HandlerFunc {
 			return
 		}
 
-		if claims, ok := token.Claims.(jwt.MapClaims); ok {
-			c.Set("user_id", claims["sub"])
-			c.Set("role", claims["role"])
+		claims, ok := token.Claims.(jwt.MapClaims)
+		if !ok {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid token claims"})
+			c.Abort()
+			return
 		}
+
+		// Reject refresh tokens - only access tokens are valid for API authentication
+		tokenType, _ := claims["type"].(string)
+		if tokenType != "access" {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid token type"})
+			c.Abort()
+			return
+		}
+
+		c.Set("user_id", claims["sub"])
+		c.Set("role", claims["role"])
 
 		c.Next()
 	}

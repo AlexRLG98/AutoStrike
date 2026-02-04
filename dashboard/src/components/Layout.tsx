@@ -8,8 +8,10 @@ import {
   DocumentTextIcon,
   PlayIcon,
   Cog6ToothIcon,
+  ArrowLeftStartOnRectangleIcon,
 } from '@heroicons/react/24/outline';
 import clsx from 'clsx';
+import { useAuth } from '../contexts/AuthContext';
 
 interface LayoutProps {
   readonly children: ReactNode;
@@ -27,6 +29,11 @@ const navigation = [
 
 export default function Layout({ children }: LayoutProps) {
   const location = useLocation();
+  const { user, logout, authEnabled } = useAuth();
+
+  const handleLogout = async () => {
+    await logout();
+  };
 
   return (
     <div className="min-h-screen flex">
@@ -59,20 +66,31 @@ export default function Layout({ children }: LayoutProps) {
         </nav>
 
         <div className="p-4 border-t border-gray-800">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-full bg-primary-600 flex items-center justify-center">
-              <span className="text-sm font-medium">
-                {(localStorage.getItem('username') || 'Admin').charAt(0).toUpperCase()}
-              </span>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-full bg-primary-600 flex items-center justify-center">
+                <span className="text-sm font-medium">
+                  {(user?.username || 'Admin').charAt(0).toUpperCase()}
+                </span>
+              </div>
+              <div>
+                <p className="text-sm font-medium">
+                  {user?.username || 'Admin'}
+                </p>
+                <p className="text-xs text-gray-400">
+                  {user?.email || 'admin@autostrike.local'}
+                </p>
+              </div>
             </div>
-            <div>
-              <p className="text-sm font-medium">
-                {localStorage.getItem('username') || 'Admin'}
-              </p>
-              <p className="text-xs text-gray-400">
-                {localStorage.getItem('email') || 'admin@autostrike.local'}
-              </p>
-            </div>
+            {authEnabled && (
+              <button
+                onClick={handleLogout}
+                className="p-2 text-gray-400 hover:text-white hover:bg-gray-800 rounded-lg transition-colors"
+                title="Logout"
+              >
+                <ArrowLeftStartOnRectangleIcon className="h-5 w-5" />
+              </button>
+            )}
           </div>
         </div>
       </div>

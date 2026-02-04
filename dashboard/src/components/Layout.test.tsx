@@ -1,7 +1,19 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import Layout from './Layout';
+import { AuthProvider } from '../contexts/AuthContext';
+import { authApi } from '../lib/api';
+
+// Mock the API
+vi.mock('../lib/api', () => ({
+  authApi: {
+    login: vi.fn(),
+    me: vi.fn(),
+    logout: vi.fn(),
+    refresh: vi.fn(),
+  },
+}));
 
 // Mock localStorage
 const localStorageMock = {
@@ -12,12 +24,29 @@ const localStorageMock = {
 };
 Object.defineProperty(window, 'localStorage', { value: localStorageMock });
 
-function renderLayout(path = '/dashboard') {
+function renderLayout(path = '/dashboard', user = { username: 'TestUser', email: 'test@example.com' }) {
+  // Set up the mock to return the user
+  localStorageMock.getItem.mockImplementation((key: string) => {
+    if (key === 'token') return 'test-token';
+    return null;
+  });
+
+  vi.mocked(authApi.me).mockResolvedValue({
+    data: {
+      id: 'user-1',
+      username: user.username,
+      email: user.email,
+      role: 'admin',
+    },
+  } as never);
+
   return render(
     <MemoryRouter initialEntries={[path]}>
-      <Layout>
-        <div data-testid="child-content">Test Content</div>
-      </Layout>
+      <AuthProvider>
+        <Layout>
+          <div data-testid="child-content">Test Content</div>
+        </Layout>
+      </AuthProvider>
     </MemoryRouter>
   );
 }
@@ -27,20 +56,26 @@ describe('Layout', () => {
     vi.clearAllMocks();
   });
 
-  it('renders AutoStrike brand name', () => {
+  it('renders AutoStrike brand name', async () => {
     renderLayout();
-    expect(screen.getByText('AutoStrike')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByText('AutoStrike')).toBeInTheDocument();
+    });
   });
 
-  it('renders BAS Platform subtitle', () => {
+  it('renders BAS Platform subtitle', async () => {
     renderLayout();
-    expect(screen.getByText('BAS Platform')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByText('BAS Platform')).toBeInTheDocument();
+    });
   });
 
-  it('renders all navigation links', () => {
+  it('renders all navigation links', async () => {
     renderLayout();
 
-    expect(screen.getByText('Dashboard')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByText('Dashboard')).toBeInTheDocument();
+    });
     expect(screen.getByText('Agents')).toBeInTheDocument();
     expect(screen.getByText('Techniques')).toBeInTheDocument();
     expect(screen.getByText('Scenarios')).toBeInTheDocument();
@@ -48,63 +83,124 @@ describe('Layout', () => {
     expect(screen.getByText('Settings')).toBeInTheDocument();
   });
 
-  it('renders children content', () => {
+  it('renders children content', async () => {
     renderLayout();
-    expect(screen.getByTestId('child-content')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByTestId('child-content')).toBeInTheDocument();
+    });
     expect(screen.getByText('Test Content')).toBeInTheDocument();
   });
 
-  it('displays default username when not in localStorage', () => {
-    localStorageMock.getItem.mockReturnValue(null);
-    renderLayout();
-    expect(screen.getByText('Admin')).toBeInTheDocument();
-  });
-
-  it('displays username from localStorage', () => {
-    localStorageMock.getItem.mockImplementation((key: string) => {
-      if (key === 'username') return 'TestUser';
-      return null;
+  it('displays user info from context', async () => {
+    renderLayout('/dashboard', { username: 'JohnDoe', email: 'john@example.com' });
+    await waitFor(() => {
+      expect(screen.getByText('JohnDoe')).toBeInTheDocument();
     });
-    renderLayout();
-    expect(screen.getByText('TestUser')).toBeInTheDocument();
+    expect(screen.getByText('john@example.com')).toBeInTheDocument();
   });
 
-  it('displays default email when not in localStorage', () => {
-    localStorageMock.getItem.mockReturnValue(null);
-    renderLayout();
-    expect(screen.getByText('admin@autostrike.local')).toBeInTheDocument();
-  });
-
-  it('displays email from localStorage', () => {
-    localStorageMock.getItem.mockImplementation((key: string) => {
-      if (key === 'email') return 'test@example.com';
-      return null;
+  it('displays first letter of username in avatar', async () => {
+    renderLayout('/dashboard', { username: 'JohnDoe', email: 'john@example.com' });
+    await waitFor(() => {
+      expect(screen.getByText('J')).toBeInTheDocument();
     });
-    renderLayout();
-    expect(screen.getByText('test@example.com')).toBeInTheDocument();
   });
 
-  it('displays first letter of username in avatar', () => {
-    localStorageMock.getItem.mockImplementation((key: string) => {
-      if (key === 'username') return 'John';
-      return null;
-    });
+  it('renders logout button', async () => {
     renderLayout();
-    expect(screen.getByText('J')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByTitle('Logout')).toBeInTheDocument();
+    });
+  });
+
+  it('calls logout when logout button is clicked', async () => {
+    vi.mocked(authApi.logout).mockResolvedValue({} as never);
+
+    renderLayout();
+
+    await waitFor(() => {
+      expect(screen.getByTitle('Logout')).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByTitle('Logout'));
+
+    await waitFor(() => {
+      expect(authApi.logout).toHaveBeenCalled();
+    });
   });
 });
 
 describe('Layout Navigation Active State', () => {
-  it('highlights active route', () => {
-    renderLayout('/dashboard');
-    const dashboardLink = screen.getByText('Dashboard').closest('a');
-    expect(dashboardLink).toHaveClass('bg-primary-600');
+  beforeEach(() => {
+    vi.clearAllMocks();
+    localStorageMock.getItem.mockReturnValue('test-token');
+    vi.mocked(authApi.me).mockResolvedValue({
+      data: {
+        id: 'user-1',
+        username: 'TestUser',
+        email: 'test@example.com',
+        role: 'admin',
+      },
+    } as never);
   });
 
-  it('does not highlight inactive routes', () => {
-    renderLayout('/dashboard');
-    const agentsLink = screen.getByText('Agents').closest('a');
-    expect(agentsLink).not.toHaveClass('bg-primary-600');
-    expect(agentsLink).toHaveClass('text-gray-300');
+  it('highlights active route', async () => {
+    render(
+      <MemoryRouter initialEntries={['/dashboard']}>
+        <AuthProvider>
+          <Layout>
+            <div>Content</div>
+          </Layout>
+        </AuthProvider>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      const dashboardLink = screen.getByText('Dashboard').closest('a');
+      expect(dashboardLink).toHaveClass('bg-primary-600');
+    });
+  });
+
+  it('does not highlight inactive routes', async () => {
+    render(
+      <MemoryRouter initialEntries={['/dashboard']}>
+        <AuthProvider>
+          <Layout>
+            <div>Content</div>
+          </Layout>
+        </AuthProvider>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      const agentsLink = screen.getByText('Agents').closest('a');
+      expect(agentsLink).not.toHaveClass('bg-primary-600');
+      expect(agentsLink).toHaveClass('text-gray-300');
+    });
+  });
+});
+
+describe('Layout with default user', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    localStorageMock.getItem.mockReturnValue(null);
+  });
+
+  it('displays default values when no user in context', async () => {
+    render(
+      <MemoryRouter initialEntries={['/dashboard']}>
+        <AuthProvider>
+          <Layout>
+            <div>Content</div>
+          </Layout>
+        </AuthProvider>
+      </MemoryRouter>
+    );
+
+    // When not authenticated, the default values should show
+    await waitFor(() => {
+      expect(screen.getByText('Admin')).toBeInTheDocument();
+    });
+    expect(screen.getByText('admin@autostrike.local')).toBeInTheDocument();
   });
 });

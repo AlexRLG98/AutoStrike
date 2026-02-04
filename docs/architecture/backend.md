@@ -91,6 +91,7 @@ server/
 │   │       └── score_calculator.go # Security score calculation
 │   ├── application/               # 🟡 Use Cases
 │   │   ├── agent_service.go       # Agent CRUD, heartbeat
+│   │   ├── auth_service.go        # Authentication (login, tokens)
 │   │   ├── execution_service.go   # Execution lifecycle
 │   │   ├── scenario_service.go    # Scenario management
 │   │   └── technique_service.go   # Technique catalog
@@ -100,6 +101,7 @@ server/
 │       ├── http/
 │       │   ├── handlers/          # HTTP handlers
 │       │   │   ├── agent_handler.go
+│       │   │   ├── auth_handler.go    # Auth endpoints
 │       │   │   ├── technique_handler.go
 │       │   │   ├── scenario_handler.go
 │       │   │   ├── execution_handler.go
@@ -110,6 +112,7 @@ server/
 │       ├── persistence/sqlite/    # SQLite implementation
 │       │   ├── schema.go
 │       │   ├── agent_repository.go
+│       │   ├── user_repository.go     # User persistence
 │       │   ├── technique_repository.go
 │       │   ├── scenario_repository.go
 │       │   └── result_repository.go
@@ -352,13 +355,15 @@ Environment variables:
 
 ## Testing
 
-Test coverage:
-- **application**: 100%
+Test coverage (Phase 3):
+- **application**: 93.9%
 - **entity**: 100%
 - **service**: 99.2%
-- **handlers**: 97.2%
+- **handlers**: 93.7%
 - **websocket**: 91.6%
 - **middleware**: 100%
+- **rest/server**: 90.0%
+- **sqlite**: 74.2%
 
 ```bash
 cd server

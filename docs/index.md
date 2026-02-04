@@ -114,6 +114,14 @@ All techniques support **Safe Mode** for production-safe testing.
 
 ## API Overview
 
+### Authentication
+| Endpoint | Description |
+|----------|-------------|
+| `POST /api/v1/auth/login` | Login (username/password) |
+| `POST /api/v1/auth/refresh` | Refresh access token |
+| `GET /api/v1/auth/me` | Get current user info |
+
+### Core API
 | Endpoint | Description |
 |----------|-------------|
 | `GET /api/v1/agents` | List connected agents |

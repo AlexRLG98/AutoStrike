@@ -1771,3 +1771,377 @@ func TestTechniqueRepository_ImportFromYAML_Upsert(t *testing.T) {
 		t.Error("Expected is_safe to be false after update")
 	}
 }
+
+// User Repository tests
+func TestNewUserRepository(t *testing.T) {
+	db := setupTestDB(t)
+	defer db.Close()
+
+	repo := NewUserRepository(db)
+	if repo == nil {
+		t.Error("Expected non-nil repository")
+	}
+}
+
+func TestUserRepository_Create(t *testing.T) {
+	db := setupTestDB(t)
+	defer db.Close()
+	repo := NewUserRepository(db)
+	ctx := context.Background()
+
+	user := &entity.User{
+		ID:           "user-1",
+		Username:     "testuser",
+		Email:        "test@example.com",
+		PasswordHash: "$2a$10$hashedpassword",
+		Role:         entity.RoleOperator,
+	}
+
+	err := repo.Create(ctx, user)
+	if err != nil {
+		t.Fatalf("Create failed: %v", err)
+	}
+
+	// Verify timestamps are set
+	if user.CreatedAt.IsZero() {
+		t.Error("Expected CreatedAt to be set")
+	}
+	if user.UpdatedAt.IsZero() {
+		t.Error("Expected UpdatedAt to be set")
+	}
+}
+
+func TestUserRepository_Create_WithExistingTimestamp(t *testing.T) {
+	db := setupTestDB(t)
+	defer db.Close()
+	repo := NewUserRepository(db)
+	ctx := context.Background()
+
+	existingTime := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
+	user := &entity.User{
+		ID:           "user-ts",
+		Username:     "tsuser",
+		Email:        "ts@example.com",
+		PasswordHash: "$2a$10$hash",
+		Role:         entity.RoleViewer,
+		CreatedAt:    existingTime,
+	}
+
+	err := repo.Create(ctx, user)
+	if err != nil {
+		t.Fatalf("Create failed: %v", err)
+	}
+
+	// CreatedAt should be preserved
+	if !user.CreatedAt.Equal(existingTime) {
+		t.Errorf("Expected CreatedAt to be preserved, got %v", user.CreatedAt)
+	}
+}
+
+func TestUserRepository_FindByID(t *testing.T) {
+	db := setupTestDB(t)
+	defer db.Close()
+	repo := NewUserRepository(db)
+	ctx := context.Background()
+
+	user := &entity.User{
+		ID:           "user-find-id",
+		Username:     "finduser",
+		Email:        "find@example.com",
+		PasswordHash: "$2a$10$hash",
+		Role:         entity.RoleAdmin,
+	}
+	_ = repo.Create(ctx, user)
+
+	found, err := repo.FindByID(ctx, "user-find-id")
+	if err != nil {
+		t.Fatalf("FindByID failed: %v", err)
+	}
+	if found.Username != "finduser" {
+		t.Errorf("Expected username 'finduser', got '%s'", found.Username)
+	}
+	if found.Role != entity.RoleAdmin {
+		t.Errorf("Expected role 'admin', got '%s'", found.Role)
+	}
+}
+
+func TestUserRepository_FindByID_NotFound(t *testing.T) {
+	db := setupTestDB(t)
+	defer db.Close()
+	repo := NewUserRepository(db)
+	ctx := context.Background()
+
+	_, err := repo.FindByID(ctx, "nonexistent")
+	if err == nil {
+		t.Error("Expected error for nonexistent user")
+	}
+}
+
+func TestUserRepository_FindByUsername(t *testing.T) {
+	db := setupTestDB(t)
+	defer db.Close()
+	repo := NewUserRepository(db)
+	ctx := context.Background()
+
+	user := &entity.User{
+		ID:           "user-find-username",
+		Username:     "uniqueuser",
+		Email:        "unique@example.com",
+		PasswordHash: "$2a$10$hash",
+		Role:         entity.RoleOperator,
+	}
+	_ = repo.Create(ctx, user)
+
+	found, err := repo.FindByUsername(ctx, "uniqueuser")
+	if err != nil {
+		t.Fatalf("FindByUsername failed: %v", err)
+	}
+	if found.ID != "user-find-username" {
+		t.Errorf("Expected ID 'user-find-username', got '%s'", found.ID)
+	}
+	if found.Email != "unique@example.com" {
+		t.Errorf("Expected email 'unique@example.com', got '%s'", found.Email)
+	}
+}
+
+func TestUserRepository_FindByUsername_NotFound(t *testing.T) {
+	db := setupTestDB(t)
+	defer db.Close()
+	repo := NewUserRepository(db)
+	ctx := context.Background()
+
+	_, err := repo.FindByUsername(ctx, "nonexistent")
+	if err == nil {
+		t.Error("Expected error for nonexistent username")
+	}
+}
+
+func TestUserRepository_FindByEmail(t *testing.T) {
+	db := setupTestDB(t)
+	defer db.Close()
+	repo := NewUserRepository(db)
+	ctx := context.Background()
+
+	user := &entity.User{
+		ID:           "user-find-email",
+		Username:     "emailuser",
+		Email:        "specific@example.com",
+		PasswordHash: "$2a$10$hash",
+		Role:         entity.RoleViewer,
+	}
+	_ = repo.Create(ctx, user)
+
+	found, err := repo.FindByEmail(ctx, "specific@example.com")
+	if err != nil {
+		t.Fatalf("FindByEmail failed: %v", err)
+	}
+	if found.Username != "emailuser" {
+		t.Errorf("Expected username 'emailuser', got '%s'", found.Username)
+	}
+}
+
+func TestUserRepository_FindByEmail_NotFound(t *testing.T) {
+	db := setupTestDB(t)
+	defer db.Close()
+	repo := NewUserRepository(db)
+	ctx := context.Background()
+
+	_, err := repo.FindByEmail(ctx, "nonexistent@example.com")
+	if err == nil {
+		t.Error("Expected error for nonexistent email")
+	}
+}
+
+func TestUserRepository_Update(t *testing.T) {
+	db := setupTestDB(t)
+	defer db.Close()
+	repo := NewUserRepository(db)
+	ctx := context.Background()
+
+	user := &entity.User{
+		ID:           "user-update",
+		Username:     "oldusername",
+		Email:        "old@example.com",
+		PasswordHash: "$2a$10$oldhash",
+		Role:         entity.RoleViewer,
+	}
+	_ = repo.Create(ctx, user)
+
+	// Update the user
+	user.Username = "newusername"
+	user.Email = "new@example.com"
+	user.Role = entity.RoleOperator
+	err := repo.Update(ctx, user)
+	if err != nil {
+		t.Fatalf("Update failed: %v", err)
+	}
+
+	// Verify update
+	found, _ := repo.FindByID(ctx, "user-update")
+	if found.Username != "newusername" {
+		t.Errorf("Expected username 'newusername', got '%s'", found.Username)
+	}
+	if found.Email != "new@example.com" {
+		t.Errorf("Expected email 'new@example.com', got '%s'", found.Email)
+	}
+	if found.Role != entity.RoleOperator {
+		t.Errorf("Expected role 'operator', got '%s'", found.Role)
+	}
+}
+
+func TestUserRepository_Delete(t *testing.T) {
+	db := setupTestDB(t)
+	defer db.Close()
+	repo := NewUserRepository(db)
+	ctx := context.Background()
+
+	user := &entity.User{
+		ID:           "user-delete",
+		Username:     "deleteuser",
+		Email:        "delete@example.com",
+		PasswordHash: "$2a$10$hash",
+		Role:         entity.RoleViewer,
+	}
+	_ = repo.Create(ctx, user)
+
+	err := repo.Delete(ctx, "user-delete")
+	if err != nil {
+		t.Fatalf("Delete failed: %v", err)
+	}
+
+	_, err = repo.FindByID(ctx, "user-delete")
+	if err == nil {
+		t.Error("Expected error after delete")
+	}
+}
+
+func TestUserRepository_FindAll(t *testing.T) {
+	db := setupTestDB(t)
+	defer db.Close()
+	repo := NewUserRepository(db)
+	ctx := context.Background()
+
+	// Create multiple users
+	for i := 0; i < 3; i++ {
+		user := &entity.User{
+			ID:           "user-all-" + string(rune('a'+i)),
+			Username:     "user" + string(rune('a'+i)),
+			Email:        "user" + string(rune('a'+i)) + "@example.com",
+			PasswordHash: "$2a$10$hash",
+			Role:         entity.RoleViewer,
+		}
+		_ = repo.Create(ctx, user)
+	}
+
+	users, err := repo.FindAll(ctx)
+	if err != nil {
+		t.Fatalf("FindAll failed: %v", err)
+	}
+	if len(users) != 3 {
+		t.Errorf("Expected 3 users, got %d", len(users))
+	}
+}
+
+func TestUserRepository_FindAll_Empty(t *testing.T) {
+	db := setupTestDB(t)
+	defer db.Close()
+	repo := NewUserRepository(db)
+	ctx := context.Background()
+
+	users, err := repo.FindAll(ctx)
+	if err != nil {
+		t.Fatalf("FindAll failed: %v", err)
+	}
+	if len(users) != 0 {
+		t.Errorf("Expected 0 users in empty DB, got %d", len(users))
+	}
+}
+
+func TestUserRepository_Create_DuplicateUsername(t *testing.T) {
+	db := setupTestDB(t)
+	defer db.Close()
+	repo := NewUserRepository(db)
+	ctx := context.Background()
+
+	user1 := &entity.User{
+		ID:           "user-dup-1",
+		Username:     "duplicate",
+		Email:        "first@example.com",
+		PasswordHash: "$2a$10$hash",
+		Role:         entity.RoleViewer,
+	}
+	_ = repo.Create(ctx, user1)
+
+	user2 := &entity.User{
+		ID:           "user-dup-2",
+		Username:     "duplicate",
+		Email:        "second@example.com",
+		PasswordHash: "$2a$10$hash",
+		Role:         entity.RoleViewer,
+	}
+
+	err := repo.Create(ctx, user2)
+	if err == nil {
+		t.Error("Expected error for duplicate username")
+	}
+}
+
+func TestUserRepository_Create_DuplicateEmail(t *testing.T) {
+	db := setupTestDB(t)
+	defer db.Close()
+	repo := NewUserRepository(db)
+	ctx := context.Background()
+
+	user1 := &entity.User{
+		ID:           "user-dup-email-1",
+		Username:     "first",
+		Email:        "duplicate@example.com",
+		PasswordHash: "$2a$10$hash",
+		Role:         entity.RoleViewer,
+	}
+	_ = repo.Create(ctx, user1)
+
+	user2 := &entity.User{
+		ID:           "user-dup-email-2",
+		Username:     "second",
+		Email:        "duplicate@example.com",
+		PasswordHash: "$2a$10$hash",
+		Role:         entity.RoleViewer,
+	}
+
+	err := repo.Create(ctx, user2)
+	if err == nil {
+		t.Error("Expected error for duplicate email")
+	}
+}
+
+func TestUserRepository_AllRoles(t *testing.T) {
+	db := setupTestDB(t)
+	defer db.Close()
+	repo := NewUserRepository(db)
+	ctx := context.Background()
+
+	roles := []entity.UserRole{entity.RoleAdmin, entity.RoleOperator, entity.RoleViewer}
+
+	for i, role := range roles {
+		user := &entity.User{
+			ID:           "user-role-" + string(rune('a'+i)),
+			Username:     "roleuser" + string(rune('a'+i)),
+			Email:        "role" + string(rune('a'+i)) + "@example.com",
+			PasswordHash: "$2a$10$hash",
+			Role:         role,
+		}
+		err := repo.Create(ctx, user)
+		if err != nil {
+			t.Fatalf("Create for role %s failed: %v", role, err)
+		}
+
+		found, err := repo.FindByID(ctx, user.ID)
+		if err != nil {
+			t.Fatalf("FindByID for role %s failed: %v", role, err)
+		}
+		if found.Role != role {
+			t.Errorf("Expected role %s, got %s", role, found.Role)
+		}
+	}
+}

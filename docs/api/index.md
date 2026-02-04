@@ -24,14 +24,31 @@ curl https://localhost:8443/api/v1/agents
 
 ### Avec authentification (production)
 
-Quand `JWT_SECRET` est défini, incluez le token dans le header `Authorization` :
+Quand `JWT_SECRET` est défini, utilisez l'endpoint `/auth/login` pour obtenir un token :
 
 ```bash
+# Login
+curl -X POST https://localhost:8443/api/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username": "admin", "password": "admin123"}'
+
+# Utiliser le token
 curl https://localhost:8443/api/v1/agents \
-  -H "Authorization: Bearer <your-jwt-token>"
+  -H "Authorization: Bearer <access_token>"
 ```
 
-> **Note**: Il n'y a pas d'endpoint `/auth/login`. Les tokens JWT doivent être générés par votre système d'authentification externe ou via les outils de développement.
+**Identifiants par défaut**: `admin / admin123`
+
+---
+
+## Endpoints d'authentification
+
+| Méthode | Endpoint | Description |
+|---------|----------|-------------|
+| POST | `/auth/login` | Login (retourne access_token + refresh_token) |
+| POST | `/auth/refresh` | Rafraîchir le token d'accès |
+| POST | `/auth/logout` | Invalider les tokens |
+| GET | `/auth/me` | Infos utilisateur courant |
 
 ---
 

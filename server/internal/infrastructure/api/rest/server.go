@@ -29,6 +29,15 @@ type ServerConfig struct {
 	DashboardPath string // Path to dashboard dist folder (empty = disabled)
 }
 
+// Services groups all application services for dependency injection
+type Services struct {
+	Agent     *application.AgentService
+	Scenario  *application.ScenarioService
+	Execution *application.ExecutionService
+	Technique *application.TechniqueService
+	Auth      *application.AuthService
+}
+
 // NewServerConfig creates a server config from environment variables
 // Auth is automatically enabled when JWT_SECRET is set, disabled otherwise.
 // This allows easy development (no secret = no auth) while being secure in production.
@@ -63,22 +72,16 @@ func NewServerConfig() *ServerConfig {
 
 // NewServer creates a new REST server with all routes configured
 func NewServer(
-	agentService *application.AgentService,
-	scenarioService *application.ScenarioService,
-	executionService *application.ExecutionService,
-	techniqueService *application.TechniqueService,
+	services *Services,
 	hub *websocket.Hub,
 	logger *zap.Logger,
 ) *Server {
-	return NewServerWithConfig(agentService, scenarioService, executionService, techniqueService, hub, logger, NewServerConfig())
+	return NewServerWithConfig(services, hub, logger, NewServerConfig())
 }
 
 // NewServerWithConfig creates a new REST server with explicit configuration
 func NewServerWithConfig(
-	agentService *application.AgentService,
-	scenarioService *application.ScenarioService,
-	executionService *application.ExecutionService,
-	techniqueService *application.TechniqueService,
+	services *Services,
 	hub *websocket.Hub,
 	logger *zap.Logger,
 	config *ServerConfig,
@@ -97,16 +100,25 @@ func NewServerWithConfig(
 	router.Use(middleware.LoggingMiddleware(logger))
 	router.Use(middleware.RecoveryMiddleware(logger))
 
-	// Health check (always public)
+	// Health check (always public) - includes auth status for frontend
 	router.GET("/health", func(c *gin.Context) {
-		c.JSON(200, gin.H{"status": "ok"})
+		c.JSON(200, gin.H{
+			"status":       "ok",
+			"auth_enabled": config.EnableAuth,
+		})
 	})
 
 	// WebSocket routes (uses agent auth)
 	if hub != nil {
-		wsHandler := handlers.NewWebSocketHandler(hub, agentService, logger)
-		wsHandler.SetExecutionService(executionService)
+		wsHandler := handlers.NewWebSocketHandler(hub, services.Agent, logger)
+		wsHandler.SetExecutionService(services.Execution)
 		wsHandler.RegisterRoutes(router)
+	}
+
+	// Auth routes (public - no auth middleware required)
+	if services.Auth != nil {
+		authHandler := handlers.NewAuthHandler(services.Auth)
+		authHandler.RegisterRoutes(router)
 	}
 
 	// API v1 routes
@@ -125,25 +137,31 @@ func NewServerWithConfig(
 	}
 
 	{
+		// Auth protected routes (GET /auth/me)
+		if services.Auth != nil {
+			authHandler := handlers.NewAuthHandler(services.Auth)
+			authHandler.RegisterProtectedRoutes(api)
+		}
+
 		// Agents
-		agentHandler := handlers.NewAgentHandler(agentService)
+		agentHandler := handlers.NewAgentHandler(services.Agent)
 		agentHandler.RegisterRoutes(api)
 
 		// Techniques
-		techniqueHandler := handlers.NewTechniqueHandler(techniqueService)
+		techniqueHandler := handlers.NewTechniqueHandler(services.Technique)
 		techniqueHandler.RegisterRoutes(api)
 
 		// Executions (with WebSocket support for real-time notifications)
 		var executionHandler *handlers.ExecutionHandler
 		if hub != nil {
-			executionHandler = handlers.NewExecutionHandlerWithHub(executionService, hub)
+			executionHandler = handlers.NewExecutionHandlerWithHub(services.Execution, hub)
 		} else {
-			executionHandler = handlers.NewExecutionHandler(executionService)
+			executionHandler = handlers.NewExecutionHandler(services.Execution)
 		}
 		executionHandler.RegisterRoutes(api)
 
 		// Scenarios
-		scenarioHandler := handlers.NewScenarioHandler(scenarioService)
+		scenarioHandler := handlers.NewScenarioHandler(services.Scenario)
 		scenarioHandler.RegisterRoutes(api)
 	}
 

@@ -21,6 +21,63 @@ The JWT token is signed with the `JWT_SECRET` and contains:
 - `role`: User role (admin, operator, viewer)
 - `exp`: Token expiration date
 
+### Auth Endpoints (Public)
+
+#### Login
+```http
+POST /api/v1/auth/login
+```
+
+**Body:**
+```json
+{
+  "username": "admin",
+  "password": "admin123"
+}
+```
+
+**Response (200):**
+```json
+{
+  "access_token": "eyJhbGciOiJIUzI1NiIs...",
+  "refresh_token": "eyJhbGciOiJIUzI1NiIs...",
+  "expires_in": 900
+}
+```
+
+#### Refresh Token
+```http
+POST /api/v1/auth/refresh
+```
+
+**Body:**
+```json
+{
+  "refresh_token": "eyJhbGciOiJIUzI1NiIs..."
+}
+```
+
+#### Logout
+```http
+POST /api/v1/auth/logout
+```
+
+#### Get Current User
+```http
+GET /api/v1/auth/me
+Authorization: Bearer <token>
+```
+
+**Response:**
+```json
+{
+  "id": "user-uuid",
+  "username": "admin",
+  "email": "admin@autostrike.local",
+  "role": "admin"
+}
+```
+
 ### Agent Authentication
 
 Agents use a specific header:
@@ -57,9 +114,12 @@ GET /health
 
 ```json
 {
-  "status": "ok"
+  "status": "ok",
+  "auth_enabled": true
 }
 ```
+
+The `auth_enabled` field indicates whether JWT authentication is enabled on the server.
 
 ---
 

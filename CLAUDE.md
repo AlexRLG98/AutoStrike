@@ -47,9 +47,10 @@ autostrike/
 │   └── src/         # Client, executor, config, system info
 ├── dashboard/       # React frontend
 │   └── src/
-│       ├── components/  # MitreMatrix, RunExecutionModal, Layout, etc.
+│       ├── components/  # MitreMatrix, RunExecutionModal, Layout, ProtectedRoute
+│       ├── contexts/    # AuthContext (authentication state)
 │       ├── hooks/       # useWebSocket
-│       ├── pages/       # Dashboard, Agents, Techniques, Matrix, Scenarios, Executions, ExecutionDetails, Settings
+│       ├── pages/       # Dashboard, Agents, Techniques, Matrix, Scenarios, Executions, ExecutionDetails, Settings, Login
 │       └── lib/         # API client
 ├── docs/            # MkDocs documentation
 └── scripts/         # Build and deployment scripts
@@ -118,9 +119,18 @@ make certs
 
 Base URL: `https://localhost:8443/api/v1`
 
+### Authentication (public routes)
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/health` | GET | Health check (returns `{"status": "ok"}`) |
+| `/auth/login` | POST | Login with username/password |
+| `/auth/refresh` | POST | Refresh access token |
+| `/auth/logout` | POST | Invalidate tokens |
+| `/auth/me` | GET | Get current user info (requires token) |
+
+### Core API (protected when auth enabled)
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/health` | GET | Health check (returns `{"status": "ok", "auth_enabled": bool}`) |
 | `/agents` | GET | List agents (`?all=true` for offline too) |
 | `/agents/:paw` | GET | Get agent details |
 | `/agents` | POST | Register agent |
@@ -225,16 +235,18 @@ All techniques are **safe mode compatible** (non-destructive).
 
 ## Testing
 
-**Test coverage (Phase 2):**
-- **Server**: 193+ tests
-  - application: 100%
+**Test coverage (Phase 3):**
+- **Server**: 200+ tests
+  - application: 93.9%
   - entity: 100%
   - service: 99.2%
-  - handlers: 97.2%
+  - handlers: 93.7%
   - websocket: 91.6%
   - middleware: 100%
+  - rest/server: 90.0%
+  - sqlite: 74.2%
 - **Agent**: 61 unit tests (`cargo test`)
-- **Dashboard**: 193 tests across 15 files (`npm test`)
+- **Dashboard**: 280 tests across 21 files (`npm test`)
 
 ```bash
 # Run all tests

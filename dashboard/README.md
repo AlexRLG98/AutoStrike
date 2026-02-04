@@ -7,20 +7,24 @@ Interface web React pour la gestion et le monitoring de la plateforme AutoStrike
 ```
 dashboard/
 ├── src/
-│   ├── main.tsx              # Point d'entrée React
+│   ├── main.tsx              # Point d'entrée React + AuthProvider
 │   ├── App.tsx               # Routes principales
 │   ├── index.css             # Styles globaux + Tailwind
 │   ├── components/
-│   │   └── Layout.tsx        # Layout avec sidebar
+│   │   ├── Layout.tsx        # Layout avec sidebar + logout
+│   │   └── ProtectedRoute.tsx # Protection des routes
+│   ├── contexts/
+│   │   └── AuthContext.tsx   # État d'authentification
 │   ├── pages/
 │   │   ├── Dashboard.tsx     # Vue d'ensemble, graphiques
 │   │   ├── Agents.tsx        # Gestion des agents
 │   │   ├── Techniques.tsx    # Catalogue MITRE ATT&CK
 │   │   ├── Scenarios.tsx     # Scénarios d'attaque
 │   │   ├── Executions.tsx    # Historique des exécutions
-│   │   └── Settings.tsx      # Configuration
+│   │   ├── Settings.tsx      # Configuration
+│   │   └── Login.tsx         # Page de connexion
 │   └── lib/
-│       └── api.ts            # Client Axios
+│       └── api.ts            # Client Axios + authApi
 ├── package.json
 ├── vite.config.ts
 ├── tailwind.config.js

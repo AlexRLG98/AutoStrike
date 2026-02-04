@@ -162,10 +162,11 @@ func TestAuthMiddleware_ValidToken(t *testing.T) {
 	secret := "test-secret-key"
 	config := &AuthConfig{JWTSecret: secret}
 
-	// Create valid token
+	// Create valid access token
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
 		"sub":  "user123",
 		"role": "admin",
+		"type": "access", // Must be access token
 		"exp":  time.Now().Add(time.Hour).Unix(),
 	})
 	tokenString, _ := token.SignedString([]byte(secret))
@@ -189,6 +190,62 @@ func TestAuthMiddleware_ValidToken(t *testing.T) {
 
 	if w.Code != http.StatusOK {
 		t.Errorf("Expected status 200, got %d", w.Code)
+	}
+}
+
+func TestAuthMiddleware_RefreshTokenRejected(t *testing.T) {
+	secret := "test-secret-key"
+	config := &AuthConfig{JWTSecret: secret}
+
+	// Create refresh token (should be rejected for API auth)
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+		"sub":  "user123",
+		"type": "refresh",
+		"exp":  time.Now().Add(time.Hour).Unix(),
+	})
+	tokenString, _ := token.SignedString([]byte(secret))
+
+	router := gin.New()
+	router.Use(AuthMiddleware(config))
+	router.GET("/test", func(c *gin.Context) {
+		c.Status(http.StatusOK)
+	})
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("GET", "/test", nil)
+	req.Header.Set("Authorization", "Bearer "+tokenString)
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusUnauthorized {
+		t.Errorf("Expected status 401 for refresh token, got %d", w.Code)
+	}
+}
+
+func TestAuthMiddleware_TokenWithoutType(t *testing.T) {
+	secret := "test-secret-key"
+	config := &AuthConfig{JWTSecret: secret}
+
+	// Create token without type claim (should be rejected)
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+		"sub":  "user123",
+		"role": "admin",
+		"exp":  time.Now().Add(time.Hour).Unix(),
+	})
+	tokenString, _ := token.SignedString([]byte(secret))
+
+	router := gin.New()
+	router.Use(AuthMiddleware(config))
+	router.GET("/test", func(c *gin.Context) {
+		c.Status(http.StatusOK)
+	})
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("GET", "/test", nil)
+	req.Header.Set("Authorization", "Bearer "+tokenString)
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusUnauthorized {
+		t.Errorf("Expected status 401 for token without type, got %d", w.Code)
 	}
 }
 

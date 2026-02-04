@@ -85,6 +85,17 @@ func InitSchema(db *sql.DB) error {
 		created_at DATETIME NOT NULL
 	);
 
+	-- Users table
+	CREATE TABLE IF NOT EXISTS users (
+		id TEXT PRIMARY KEY,
+		username TEXT UNIQUE NOT NULL,
+		email TEXT UNIQUE NOT NULL,
+		password_hash TEXT NOT NULL,
+		role TEXT NOT NULL DEFAULT 'viewer',
+		created_at DATETIME NOT NULL,
+		updated_at DATETIME NOT NULL
+	);
+
 	-- Indexes
 	CREATE INDEX IF NOT EXISTS idx_agents_status ON agents(status);
 	CREATE INDEX IF NOT EXISTS idx_agents_platform ON agents(platform);
@@ -92,6 +103,8 @@ func InitSchema(db *sql.DB) error {
 	CREATE INDEX IF NOT EXISTS idx_executions_scenario ON executions(scenario_id);
 	CREATE INDEX IF NOT EXISTS idx_execution_results_execution ON execution_results(execution_id);
 	CREATE INDEX IF NOT EXISTS idx_execution_results_technique ON execution_results(technique_id);
+	CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
+	CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
 	`
 
 	_, err := db.Exec(schema)

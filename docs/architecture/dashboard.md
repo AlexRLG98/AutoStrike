@@ -29,12 +29,15 @@ dashboard/
 │   ├── App.tsx               # Route configuration
 │   ├── index.css             # Global styles + Tailwind directives
 │   ├── components/
-│   │   ├── Layout.tsx        # Sidebar navigation layout
+│   │   ├── Layout.tsx        # Sidebar navigation layout + logout
+│   │   ├── ProtectedRoute.tsx # Route protection wrapper
 │   │   ├── MitreMatrix.tsx   # Interactive MITRE ATT&CK matrix
 │   │   ├── RunExecutionModal.tsx  # Execution configuration modal
 │   │   ├── LoadingState.tsx  # Loading spinner component
 │   │   ├── EmptyState.tsx    # Empty state placeholder
 │   │   └── ErrorBoundary.tsx # Error boundary wrapper
+│   ├── contexts/
+│   │   └── AuthContext.tsx   # Authentication state & hooks
 │   ├── hooks/
 │   │   └── useWebSocket.ts   # WebSocket connection hook
 │   ├── pages/
@@ -45,7 +48,8 @@ dashboard/
 │   │   ├── Scenarios.tsx     # Attack scenarios
 │   │   ├── Executions.tsx    # Execution history
 │   │   ├── ExecutionDetails.tsx  # Detailed execution results
-│   │   └── Settings.tsx      # Application configuration
+│   │   ├── Settings.tsx      # Application configuration
+│   │   └── Login.tsx         # Login page
 │   ├── lib/
 │   │   └── api.ts            # Axios client with interceptors
 │   └── types/
@@ -275,14 +279,14 @@ npm run build     # Production build
 npm run preview   # Preview build
 npm run lint      # ESLint check
 npm run type-check # TypeScript check
-npm test          # Vitest tests (193 tests)
+npm test          # Vitest tests (269 tests)
 ```
 
 ---
 
 ## Testing
 
-193 tests across 15 test files:
+269 tests across 21 test files:
 
 - Component tests (Layout, MitreMatrix, RunExecutionModal)
 - Page tests (Dashboard, Agents, Techniques, Scenarios, Executions, etc.)

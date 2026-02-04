@@ -91,6 +91,14 @@ go build -o autostrike ./cmd/autostrike
 
 Base URL: `https://localhost:8443/api/v1`
 
+### Authentication (routes publiques)
+| Méthode | Endpoint | Description |
+|---------|----------|-------------|
+| POST | `/auth/login` | Login avec username/password |
+| POST | `/auth/refresh` | Rafraîchir le token d'accès |
+| POST | `/auth/logout` | Invalider les tokens |
+| GET | `/auth/me` | Infos utilisateur courant (requiert token) |
+
 ### Agents
 | Méthode | Endpoint | Description |
 |---------|----------|-------------|
