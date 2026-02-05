@@ -12,6 +12,7 @@ import { getTacticBadgeColor, formatTacticName } from '../lib/tacticColors';
 import { Technique } from '../types';
 import { LoadingState } from '../components/LoadingState';
 import { EmptyState } from '../components/EmptyState';
+import { TableHeader, TableBody, TableRow, TABLE_CELL_CLASS, TABLE_CELL_NOWRAP_CLASS } from '../components/Table';
 import toast from 'react-hot-toast';
 
 interface ImportResult {
@@ -151,43 +152,25 @@ export default function Techniques() {
 
       <div className="card overflow-hidden">
         <table className="w-full">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                ID
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Name
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Tactic
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Platforms
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Safe
-              </th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-200">
+          <TableHeader columns={['ID', 'Name', 'Tactic', 'Platforms', 'Safe']} />
+          <TableBody>
             {techniques?.map((technique) => (
-              <tr key={technique.id} className="hover:bg-gray-50">
-                <td className="px-6 py-4 whitespace-nowrap">
+              <TableRow key={technique.id}>
+                <td className={TABLE_CELL_NOWRAP_CLASS}>
                   <span className="font-mono text-sm">{technique.id}</span>
                 </td>
-                <td className="px-6 py-4">
+                <td className={TABLE_CELL_CLASS}>
                   <p className="font-medium">{technique.name}</p>
                   <p className="text-sm text-gray-500 truncate max-w-md">
                     {technique.description}
                   </p>
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap">
+                <td className={TABLE_CELL_NOWRAP_CLASS}>
                   <span className={`badge ${getTacticBadgeColor(technique.tactic)}`}>
                     {formatTacticName(technique.tactic)}
                   </span>
                 </td>
-                <td className="px-6 py-4">
+                <td className={TABLE_CELL_CLASS}>
                   <div className="flex gap-1">
                     {technique.platforms.map((platform) => (
                       <span key={platform} className="badge bg-gray-100 text-gray-700">
@@ -196,14 +179,14 @@ export default function Techniques() {
                     ))}
                   </div>
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap">
+                <td className={TABLE_CELL_NOWRAP_CLASS}>
                   <span className={`badge ${technique.is_safe ? 'badge-success' : 'badge-danger'}`}>
                     {technique.is_safe ? 'Safe' : 'Unsafe'}
                   </span>
                 </td>
-              </tr>
+              </TableRow>
             ))}
-          </tbody>
+          </TableBody>
         </table>
       </div>
 
