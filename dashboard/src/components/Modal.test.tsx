@@ -115,5 +115,24 @@ describe('Modal', () => {
       fireEvent.click(content);
       expect(defaultProps.onClose).not.toHaveBeenCalled();
     });
+
+    it('calls onClose when Escape key is pressed', () => {
+      render(<Modal {...defaultProps} />);
+      fireEvent.keyDown(document, { key: 'Escape' });
+      expect(defaultProps.onClose).toHaveBeenCalledTimes(1);
+    });
+
+    it('has proper accessibility attributes', () => {
+      render(<Modal {...defaultProps} />);
+      const dialog = screen.getByRole('dialog');
+      expect(dialog).toHaveAttribute('aria-modal', 'true');
+      expect(dialog).toHaveAttribute('aria-labelledby', 'modal-title');
+    });
+
+    it('has title with correct id for aria-labelledby', () => {
+      render(<Modal {...defaultProps} />);
+      const title = screen.getByText('Test Modal');
+      expect(title).toHaveAttribute('id', 'modal-title');
+    });
   });
 });
