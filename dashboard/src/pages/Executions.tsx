@@ -114,6 +114,62 @@ interface ScenarioSelectModalProps {
   readonly onCancel: () => void;
 }
 
+/**
+ * Renders the content of the scenario selection modal based on loading state and scenarios.
+ */
+function ScenarioSelectContent({
+  scenarios,
+  isLoading,
+  onSelect,
+}: {
+  readonly scenarios: Scenario[] | undefined;
+  readonly isLoading: boolean;
+  readonly onSelect: (scenario: Scenario) => void;
+}) {
+  if (isLoading) {
+    return (
+      <div className="flex justify-center py-8">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
+      </div>
+    );
+  }
+
+  if (!scenarios || scenarios.length === 0) {
+    return (
+      <p className="text-gray-500 text-center py-8">No scenarios available. Create a scenario first.</p>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      {scenarios.map((scenario) => (
+        <button
+          key={scenario.id}
+          onClick={() => onSelect(scenario)}
+          className="w-full text-left p-4 border rounded-lg hover:border-primary-500 hover:bg-primary-50 transition-colors"
+        >
+          <div className="flex justify-between items-start">
+            <div>
+              <h3 className="font-semibold">{scenario.name}</h3>
+              <p className="text-sm text-gray-500 mt-1">{scenario.description}</p>
+            </div>
+            <span className="text-xs text-gray-400">
+              {scenario.phases.length} phases
+            </span>
+          </div>
+          <div className="mt-2 flex gap-1 flex-wrap">
+            {scenario.tags?.map((tag) => (
+              <span key={tag} className="badge bg-gray-100 text-gray-700 text-xs">
+                {tag}
+              </span>
+            ))}
+          </div>
+        </button>
+      ))}
+    </div>
+  );
+}
+
 function ScenarioSelectModal({ scenarios, isLoading, onSelect, onCancel }: Readonly<ScenarioSelectModalProps>) {
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
@@ -128,40 +184,7 @@ function ScenarioSelectModal({ scenarios, isLoading, onSelect, onCancel }: Reado
           </button>
         </div>
         <div className="p-6 overflow-y-auto flex-1">
-          {isLoading ? (
-            <div className="flex justify-center py-8">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
-            </div>
-          ) : !scenarios || scenarios.length === 0 ? (
-            <p className="text-gray-500 text-center py-8">No scenarios available. Create a scenario first.</p>
-          ) : (
-            <div className="space-y-3">
-              {scenarios.map((scenario) => (
-                <button
-                  key={scenario.id}
-                  onClick={() => onSelect(scenario)}
-                  className="w-full text-left p-4 border rounded-lg hover:border-primary-500 hover:bg-primary-50 transition-colors"
-                >
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <h3 className="font-semibold">{scenario.name}</h3>
-                      <p className="text-sm text-gray-500 mt-1">{scenario.description}</p>
-                    </div>
-                    <span className="text-xs text-gray-400">
-                      {scenario.phases.length} phases
-                    </span>
-                  </div>
-                  <div className="mt-2 flex gap-1 flex-wrap">
-                    {scenario.tags?.map((tag) => (
-                      <span key={tag} className="badge bg-gray-100 text-gray-700 text-xs">
-                        {tag}
-                      </span>
-                    ))}
-                  </div>
-                </button>
-              ))}
-            </div>
-          )}
+          <ScenarioSelectContent scenarios={scenarios} isLoading={isLoading} onSelect={onSelect} />
         </div>
       </div>
     </div>
