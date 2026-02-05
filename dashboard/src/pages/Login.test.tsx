@@ -68,9 +68,9 @@ describe('Login Page', () => {
     expect(screen.getByRole('button', { name: 'Sign in' })).toBeInTheDocument();
   });
 
-  it('renders default credentials hint', () => {
+  it('renders contact admin hint', () => {
     renderLogin();
-    expect(screen.getByText('Default credentials: admin / admin123')).toBeInTheDocument();
+    expect(screen.getByText('Contact your administrator for access credentials')).toBeInTheDocument();
   });
 
   it('renders platform subtitle', () => {

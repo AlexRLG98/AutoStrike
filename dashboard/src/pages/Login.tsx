@@ -136,7 +136,7 @@ export default function Login() {
         </form>
 
         <div className="mt-6 text-center text-xs text-gray-500">
-          <p>Default credentials: admin / admin123</p>
+          <p>Contact your administrator for access credentials</p>
         </div>
       </div>
     </div>

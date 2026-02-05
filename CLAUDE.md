@@ -50,7 +50,7 @@ autostrike/
 │       ├── components/  # MitreMatrix, RunExecutionModal, Layout, ProtectedRoute
 │       ├── contexts/    # AuthContext (authentication state)
 │       ├── hooks/       # useWebSocket
-│       ├── pages/       # Dashboard, Agents, Techniques, Matrix, Scenarios, Executions, ExecutionDetails, Settings, Login
+│       ├── pages/       # Dashboard, Agents, Techniques, Matrix, Scenarios, Executions, ExecutionDetails, Settings, Login, Analytics, Scheduler, Admin/*
 │       └── lib/         # API client
 ├── docs/            # MkDocs documentation
 └── scripts/         # Build and deployment scripts
@@ -155,6 +155,57 @@ Base URL: `https://localhost:8443/api/v1`
 | `/executions/:id/stop` | POST | Stop execution |
 | `/executions/:id/complete` | POST | Complete execution |
 
+### Admin API (requires admin role)
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/admin/users` | GET | List all users |
+| `/admin/users/:id` | GET | Get user by ID |
+| `/admin/users` | POST | Create user |
+| `/admin/users/:id` | PUT | Update user |
+| `/admin/users/:id/role` | PUT | Update user role |
+| `/admin/users/:id` | DELETE | Deactivate user |
+| `/admin/users/:id/reactivate` | POST | Reactivate user |
+| `/admin/users/:id/reset-password` | POST | Reset password |
+
+### Schedules API
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/schedules` | GET | List all schedules |
+| `/schedules/:id` | GET | Get schedule by ID |
+| `/schedules` | POST | Create schedule |
+| `/schedules/:id` | PUT | Update schedule |
+| `/schedules/:id` | DELETE | Delete schedule |
+| `/schedules/:id/pause` | POST | Pause schedule |
+| `/schedules/:id/resume` | POST | Resume schedule |
+| `/schedules/:id/run` | POST | Run schedule now |
+| `/schedules/:id/runs` | GET | Get schedule run history |
+
+### Notifications API
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/notifications` | GET | Get notifications |
+| `/notifications/unread/count` | GET | Get unread count |
+| `/notifications/:id/read` | POST | Mark as read |
+| `/notifications/read-all` | POST | Mark all as read |
+| `/notifications/settings` | GET/POST/PUT/DELETE | Manage notification settings |
+| `/notifications/smtp` | GET | Get SMTP config (admin) |
+| `/notifications/smtp/test` | POST | Test SMTP (admin) |
+
+### Analytics API
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/analytics/period` | GET | Get period stats |
+| `/analytics/comparison` | GET | Compare periods |
+| `/analytics/trend` | GET | Get score trend |
+| `/analytics/summary` | GET | Get execution summary |
+
+### Permissions API
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/permissions/matrix` | GET | Get permission matrix |
+| `/permissions/me` | GET | Get my permissions |
+| `/permissions/check` | POST | Check permission |
+
 ## WebSocket Protocol
 
 ### Agent ↔ Server
@@ -237,16 +288,16 @@ All techniques are **safe mode compatible** (non-destructive).
 
 **Test coverage (Phase 3):**
 - **Server**: 200+ tests
-  - application: 93.9%
-  - entity: 100%
+  - application: 83.0%
+  - entity: 95.0%
   - service: 99.2%
-  - handlers: 93.7%
+  - handlers: 87.5%
   - websocket: 91.6%
-  - middleware: 100%
-  - rest/server: 90.0%
-  - sqlite: 74.2%
-- **Agent**: 61 unit tests (`cargo test`)
-- **Dashboard**: 280 tests across 21 files (`npm test`)
+  - middleware: 94.3%
+  - rest/server: 87.9%
+  - sqlite: 85.0%
+- **Agent**: 67 unit tests (`cargo test`)
+- **Dashboard**: 513 tests across 25 files (`npm test`)
 
 ```bash
 # Run all tests

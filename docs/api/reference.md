@@ -18,7 +18,7 @@ Authorization: Bearer <token>
 
 The JWT token is signed with the `JWT_SECRET` and contains:
 - `sub`: User ID
-- `role`: User role (admin, operator, viewer)
+- `role`: User role (admin, rssi, operator, analyst, viewer)
 - `exp`: Token expiration date
 
 ### Auth Endpoints (Public)
@@ -593,6 +593,314 @@ score = (blocked * 100 + detected * 50) / (total * 100) * 100
 **Example:** 5 techniques tested, 2 blocked, 2 detected, 1 successful
 ```
 score = (2*100 + 2*50) / (5*100) * 100 = 300/500 * 100 = 60%
+```
+
+---
+
+## Schedules
+
+### List Schedules
+
+```http
+GET /api/v1/schedules
+```
+
+**Response:**
+
+```json
+[
+  {
+    "id": "schedule-uuid",
+    "name": "Daily Discovery Scan",
+    "description": "Run discovery techniques daily",
+    "scenario_id": "scenario-001",
+    "agent_paw": "",
+    "frequency": "daily",
+    "cron_expr": "",
+    "safe_mode": true,
+    "status": "active",
+    "next_run_at": "2024-01-02T00:00:00Z",
+    "last_run_at": "2024-01-01T00:00:00Z",
+    "created_by": "user-uuid",
+    "created_at": "2024-01-01T10:00:00Z"
+  }
+]
+```
+
+### Get Schedule
+
+```http
+GET /api/v1/schedules/:id
+```
+
+### Create Schedule
+
+```http
+POST /api/v1/schedules
+```
+
+**Body:**
+
+```json
+{
+  "name": "Daily Discovery Scan",
+  "description": "Run discovery techniques daily",
+  "scenario_id": "scenario-001",
+  "agent_paw": "",
+  "frequency": "daily",
+  "cron_expr": "",
+  "safe_mode": true,
+  "start_at": "2024-01-01T00:00:00Z"
+}
+```
+
+**Frequency Values:** `once`, `hourly`, `daily`, `weekly`, `monthly`, `cron`
+
+### Update Schedule
+
+```http
+PUT /api/v1/schedules/:id
+```
+
+### Delete Schedule
+
+```http
+DELETE /api/v1/schedules/:id
+```
+
+### Pause Schedule
+
+```http
+POST /api/v1/schedules/:id/pause
+```
+
+### Resume Schedule
+
+```http
+POST /api/v1/schedules/:id/resume
+```
+
+### Get Schedule Runs
+
+```http
+GET /api/v1/schedules/:id/runs?limit=10
+```
+
+---
+
+## Notifications
+
+### List Notifications
+
+```http
+GET /api/v1/notifications?unread_only=false&limit=50
+```
+
+### Get Notification Settings
+
+```http
+GET /api/v1/notifications/settings
+```
+
+**Response:**
+
+```json
+{
+  "id": "settings-uuid",
+  "user_id": "user-uuid",
+  "channel": "email",
+  "enabled": true,
+  "email_address": "user@example.com",
+  "notify_on_start": false,
+  "notify_on_complete": true,
+  "notify_on_failure": true,
+  "notify_on_score_alert": true,
+  "score_alert_threshold": 50.0
+}
+```
+
+### Update Notification Settings
+
+```http
+PUT /api/v1/notifications/settings
+```
+
+### Mark Notification as Read
+
+```http
+POST /api/v1/notifications/:id/read
+```
+
+### Mark All as Read
+
+```http
+POST /api/v1/notifications/read-all
+```
+
+---
+
+## Analytics
+
+### Get Score Trend
+
+```http
+GET /api/v1/analytics/trend?days=30
+```
+
+**Response:**
+
+```json
+{
+  "period": "30d",
+  "data_points": [
+    {
+      "date": "2024-01-01",
+      "average_score": 75.5,
+      "execution_count": 3,
+      "blocked": 5,
+      "detected": 3,
+      "successful": 2
+    }
+  ],
+  "summary": {
+    "start_score": 70.0,
+    "end_score": 80.0,
+    "average_score": 75.0,
+    "overall_trend": "improving",
+    "percentage_change": 14.3
+  }
+}
+```
+
+### Compare Periods
+
+```http
+GET /api/v1/analytics/compare?days=7
+```
+
+### Get Execution Summary
+
+```http
+GET /api/v1/analytics/summary?days=30
+```
+
+---
+
+## Admin - Users
+
+### List Users
+
+```http
+GET /api/v1/admin/users
+```
+
+**Response:**
+
+```json
+[
+  {
+    "id": "user-uuid",
+    "username": "admin",
+    "email": "admin@autostrike.local",
+    "role": "admin",
+    "is_active": true,
+    "last_login_at": "2024-01-01T12:00:00Z",
+    "created_at": "2024-01-01T10:00:00Z"
+  }
+]
+```
+
+**Roles:** `admin`, `rssi`, `operator`, `analyst`, `viewer`
+
+### Get User
+
+```http
+GET /api/v1/admin/users/:id
+```
+
+### Create User
+
+```http
+POST /api/v1/admin/users
+```
+
+**Body:**
+
+```json
+{
+  "username": "operator1",
+  "email": "operator1@example.com",
+  "password": "securepassword",
+  "role": "operator"
+}
+```
+
+### Update User
+
+```http
+PUT /api/v1/admin/users/:id
+```
+
+### Delete User
+
+```http
+DELETE /api/v1/admin/users/:id
+```
+
+### Activate User
+
+```http
+POST /api/v1/admin/users/:id/activate
+```
+
+### Deactivate User
+
+```http
+POST /api/v1/admin/users/:id/deactivate
+```
+
+---
+
+## Permissions
+
+### Get Permission Matrix
+
+```http
+GET /api/v1/permissions/matrix
+```
+
+**Response:**
+
+```json
+{
+  "roles": ["admin", "rssi", "operator", "analyst", "viewer"],
+  "categories": [
+    {"name": "Agents", "description": "Agent management"}
+  ],
+  "permissions": [
+    {"permission": "agents:read", "name": "View Agents", "category": "Agents"}
+  ],
+  "matrix": {
+    "admin": ["agents:read", "agents:write", "agents:delete"],
+    "operator": ["agents:read", "agents:write"],
+    "viewer": ["agents:read"]
+  }
+}
+```
+
+### Get My Permissions
+
+```http
+GET /api/v1/permissions/me
+```
+
+**Response:**
+
+```json
+{
+  "role": "operator",
+  "permissions": ["agents:read", "agents:write", "techniques:read", "scenarios:read"]
+}
 ```
 
 ---

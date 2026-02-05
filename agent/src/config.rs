@@ -15,6 +15,9 @@ pub struct AgentConfig {
     pub heartbeat_interval: u64,
     /// TLS configuration for secure connections.
     pub tls: TlsConfig,
+    /// Agent authentication secret (X-Agent-Key header).
+    #[serde(default)]
+    pub agent_secret: Option<String>,
 }
 
 /// TLS configuration for secure server connections.
@@ -45,7 +48,12 @@ impl AgentConfig {
     /// Loads configuration from file with CLI argument overrides.
     ///
     /// Priority: CLI argument > config file > generated default.
-    pub fn load(path: &str, server: &str, paw: Option<String>) -> Result<Self> {
+    pub fn load(
+        path: &str,
+        server: &str,
+        paw: Option<String>,
+        agent_secret: Option<String>,
+    ) -> Result<Self> {
         // Try to load from file first
         let file_config = if std::path::Path::new(path).exists() {
             let mut settings = config::Config::default();
@@ -60,6 +68,10 @@ impl AgentConfig {
             .or_else(|| file_config.as_ref().map(|c| c.paw.clone()))
             .unwrap_or_else(|| Uuid::new_v4().to_string());
 
+        // Priority: CLI arg > config file > None
+        let resolved_secret =
+            agent_secret.or_else(|| file_config.as_ref().and_then(|c| c.agent_secret.clone()));
+
         Ok(AgentConfig {
             server_url: server.to_string(),
             paw: resolved_paw,
@@ -67,7 +79,11 @@ impl AgentConfig {
                 .as_ref()
                 .map(|c| c.heartbeat_interval)
                 .unwrap_or(30),
-            tls: file_config.map(|c| c.tls).unwrap_or_default(),
+            tls: file_config
+                .as_ref()
+                .map(|c| c.tls.clone())
+                .unwrap_or_default(),
+            agent_secret: resolved_secret,
         })
     }
 }
@@ -105,6 +121,7 @@ mod tests {
             "nonexistent.yaml",
             "https://test.server:8443",
             Some("custom-paw".to_string()),
+            None,
         )
         .unwrap();
 
@@ -112,11 +129,26 @@ mod tests {
         assert_eq!(config.paw, "custom-paw");
         assert_eq!(config.heartbeat_interval, 30);
         assert!(config.tls.verify);
+        assert!(config.agent_secret.is_none());
+    }
+
+    #[test]
+    fn test_load_with_agent_secret() {
+        let config = AgentConfig::load(
+            "nonexistent.yaml",
+            "https://test.server:8443",
+            Some("paw".to_string()),
+            Some("my-secret".to_string()),
+        )
+        .unwrap();
+
+        assert_eq!(config.agent_secret, Some("my-secret".to_string()));
     }
 
     #[test]
     fn test_load_generates_uuid_paw() {
-        let config = AgentConfig::load("nonexistent.yaml", "https://server:8443", None).unwrap();
+        let config =
+            AgentConfig::load("nonexistent.yaml", "https://server:8443", None, None).unwrap();
 
         assert!(!config.paw.is_empty());
         assert!(Uuid::parse_str(&config.paw).is_ok());
@@ -125,14 +157,16 @@ mod tests {
     #[test]
     fn test_load_uses_server_url() {
         let config =
-            AgentConfig::load("nonexistent.yaml", "https://custom.server:9999", None).unwrap();
+            AgentConfig::load("nonexistent.yaml", "https://custom.server:9999", None, None)
+                .unwrap();
 
         assert_eq!(config.server_url, "https://custom.server:9999");
     }
 
     #[test]
     fn test_load_default_heartbeat() {
-        let config = AgentConfig::load("nonexistent.yaml", "https://server:8443", None).unwrap();
+        let config =
+            AgentConfig::load("nonexistent.yaml", "https://server:8443", None, None).unwrap();
 
         assert_eq!(config.heartbeat_interval, 30);
     }
@@ -144,12 +178,14 @@ mod tests {
             paw: "test-paw".to_string(),
             heartbeat_interval: 60,
             tls: TlsConfig::default(),
+            agent_secret: Some("secret".to_string()),
         };
 
         let cloned = config.clone();
         assert_eq!(cloned.server_url, config.server_url);
         assert_eq!(cloned.paw, config.paw);
         assert_eq!(cloned.heartbeat_interval, config.heartbeat_interval);
+        assert_eq!(cloned.agent_secret, config.agent_secret);
     }
 
     #[test]
@@ -159,6 +195,7 @@ mod tests {
             paw: "test-paw".to_string(),
             heartbeat_interval: 30,
             tls: TlsConfig::default(),
+            agent_secret: None,
         };
 
         let debug_str = format!("{:?}", config);
@@ -199,6 +236,7 @@ tls:
   key_file: "/path/to/key.pem"
   ca_file: ~
   verify: false
+agent_secret: "file-secret"
 "#;
 
         let mut file = fs::File::create(&config_path).unwrap();
@@ -208,6 +246,7 @@ tls:
             config_path.to_str().unwrap(),
             "https://cli-server:8443",
             None,
+            None,
         )
         .unwrap();
 
@@ -216,6 +255,7 @@ tls:
         assert_eq!(config.heartbeat_interval, 45);
         assert_eq!(config.tls.cert_file.as_deref(), Some("/path/to/cert.pem"));
         assert!(!config.tls.verify);
+        assert_eq!(config.agent_secret, Some("file-secret".to_string()));
 
         fs::remove_file(&config_path).ok();
     }
@@ -243,10 +283,44 @@ tls:
             config_path.to_str().unwrap(),
             "https://server:8443",
             Some("cli-paw-789".to_string()),
+            None,
         )
         .unwrap();
 
         assert_eq!(config.paw, "cli-paw-789");
+
+        fs::remove_file(&config_path).ok();
+    }
+
+    #[test]
+    fn test_load_cli_secret_overrides_file() {
+        use std::fs;
+        use std::io::Write;
+
+        let temp_dir = std::env::temp_dir();
+        let config_path = temp_dir.join("test_agent_config_secret_override.yaml");
+
+        let config_content = r#"
+server_url: "https://file-server:8443"
+paw: "file-paw"
+heartbeat_interval: 30
+tls:
+  verify: true
+agent_secret: "file-secret"
+"#;
+
+        let mut file = fs::File::create(&config_path).unwrap();
+        file.write_all(config_content.as_bytes()).unwrap();
+
+        let config = AgentConfig::load(
+            config_path.to_str().unwrap(),
+            "https://server:8443",
+            None,
+            Some("cli-secret".to_string()),
+        )
+        .unwrap();
+
+        assert_eq!(config.agent_secret, Some("cli-secret".to_string()));
 
         fs::remove_file(&config_path).ok();
     }
@@ -258,12 +332,14 @@ tls:
             paw: "test-paw".to_string(),
             heartbeat_interval: 60,
             tls: TlsConfig::default(),
+            agent_secret: Some("test-secret".to_string()),
         };
 
         let json = serde_json::to_string(&config).unwrap();
         assert!(json.contains("server_url"));
         assert!(json.contains("paw"));
         assert!(json.contains("heartbeat_interval"));
+        assert!(json.contains("agent_secret"));
     }
 
     #[test]
@@ -284,5 +360,20 @@ tls:
         assert_eq!(config.server_url, "https://server:8443");
         assert_eq!(config.paw, "deserialized-paw");
         assert_eq!(config.heartbeat_interval, 120);
+        assert!(config.agent_secret.is_none()); // Default is None
+    }
+
+    #[test]
+    fn test_config_deserialization_with_secret() {
+        let json = r#"{
+            "server_url": "https://server:8443",
+            "paw": "paw",
+            "heartbeat_interval": 30,
+            "tls": { "verify": true },
+            "agent_secret": "my-secret"
+        }"#;
+
+        let config: AgentConfig = serde_json::from_str(json).unwrap();
+        assert_eq!(config.agent_secret, Some("my-secret".to_string()));
     }
 }

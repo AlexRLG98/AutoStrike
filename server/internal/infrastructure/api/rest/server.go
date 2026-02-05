@@ -7,12 +7,18 @@ import (
 	"strings"
 
 	"autostrike/internal/application"
+	"autostrike/internal/domain/entity"
 	"autostrike/internal/infrastructure/http/handlers"
 	"autostrike/internal/infrastructure/http/middleware"
 	"autostrike/internal/infrastructure/websocket"
 
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
+)
+
+// Route path constants to avoid duplication
+const (
+	routeUserByID = "/users/:id"
 )
 
 // Server represents the HTTP REST server
@@ -31,11 +37,14 @@ type ServerConfig struct {
 
 // Services groups all application services for dependency injection
 type Services struct {
-	Agent     *application.AgentService
-	Scenario  *application.ScenarioService
-	Execution *application.ExecutionService
-	Technique *application.TechniqueService
-	Auth      *application.AuthService
+	Agent        *application.AgentService
+	Scenario     *application.ScenarioService
+	Execution    *application.ExecutionService
+	Technique    *application.TechniqueService
+	Auth         *application.AuthService
+	Analytics    *application.AnalyticsService
+	Notification *application.NotificationService
+	Schedule     *application.ScheduleService
 }
 
 // NewServerConfig creates a server config from environment variables
@@ -133,37 +142,13 @@ func NewServerWithConfig(
 		api.Use(middleware.AuthMiddleware(authConfig))
 		logger.Info("Authentication middleware enabled for API routes")
 	} else {
+		// Use NoAuth middleware to set default user context for handlers that check user_id
+		api.Use(middleware.NoAuthMiddleware())
 		logger.Warn("Authentication middleware DISABLED - set ENABLE_AUTH=true and JWT_SECRET in production")
 	}
 
-	{
-		// Auth protected routes (GET /auth/me)
-		if services.Auth != nil {
-			authHandler := handlers.NewAuthHandler(services.Auth)
-			authHandler.RegisterProtectedRoutes(api)
-		}
-
-		// Agents
-		agentHandler := handlers.NewAgentHandler(services.Agent)
-		agentHandler.RegisterRoutes(api)
-
-		// Techniques
-		techniqueHandler := handlers.NewTechniqueHandler(services.Technique)
-		techniqueHandler.RegisterRoutes(api)
-
-		// Executions (with WebSocket support for real-time notifications)
-		var executionHandler *handlers.ExecutionHandler
-		if hub != nil {
-			executionHandler = handlers.NewExecutionHandlerWithHub(services.Execution, hub)
-		} else {
-			executionHandler = handlers.NewExecutionHandler(services.Execution)
-		}
-		executionHandler.RegisterRoutes(api)
-
-		// Scenarios
-		scenarioHandler := handlers.NewScenarioHandler(services.Scenario)
-		scenarioHandler.RegisterRoutes(api)
-	}
+	// Register routes with permission middleware
+	registerRoutesWithPermissions(api, services, hub, logger)
 
 	// Serve dashboard static files if path is configured
 	if config.DashboardPath != "" {
@@ -209,6 +194,149 @@ func setupDashboardRoutes(router *gin.Engine, dashboardPath string, logger *zap.
 	})
 
 	logger.Info("Dashboard serving enabled", zap.String("path", absPath))
+}
+
+// registerRoutesWithPermissions registers all API routes with appropriate permission middleware
+func registerRoutesWithPermissions(api *gin.RouterGroup, services *Services, hub *websocket.Hub, logger *zap.Logger) {
+	// Helper to create permission middleware
+	perm := middleware.PermissionMiddleware
+	adminOnly := middleware.RoleMiddleware("admin")
+
+	// Auth protected routes (GET /auth/me)
+	if services.Auth != nil {
+		authHandler := handlers.NewAuthHandler(services.Auth)
+		authHandler.RegisterProtectedRoutes(api)
+
+		// Admin routes (requires admin role)
+		adminHandler := handlers.NewAdminHandler(services.Auth)
+		admin := api.Group("/admin")
+		admin.Use(adminOnly)
+		{
+			admin.GET("/users", adminHandler.ListUsers)
+			admin.GET(routeUserByID, adminHandler.GetUser)
+			admin.POST("/users", adminHandler.CreateUser)
+			admin.PUT(routeUserByID, adminHandler.UpdateUser)
+			admin.PUT(routeUserByID+"/role", adminHandler.UpdateUserRole)
+			admin.DELETE(routeUserByID, adminHandler.DeactivateUser)
+			admin.POST(routeUserByID+"/reactivate", adminHandler.ReactivateUser)
+			admin.POST(routeUserByID+"/reset-password", adminHandler.ResetPassword)
+		}
+	}
+
+	// Permission routes (all authenticated users can view)
+	permissionHandler := handlers.NewPermissionHandler()
+	permissions := api.Group("/permissions")
+	{
+		permissions.GET("/matrix", permissionHandler.GetPermissionMatrix)
+		permissions.GET("/me", permissionHandler.GetMyPermissions)
+	}
+
+	// Agents - view for all, create/delete requires permission
+	agentHandler := handlers.NewAgentHandler(services.Agent)
+	agents := api.Group("/agents")
+	{
+		agents.GET("", perm(entity.PermissionAgentsView), agentHandler.ListAgents)
+		agents.GET("/:paw", perm(entity.PermissionAgentsView), agentHandler.GetAgent)
+		agents.POST("", perm(entity.PermissionAgentsCreate), agentHandler.RegisterAgent)
+		agents.DELETE("/:paw", perm(entity.PermissionAgentsDelete), agentHandler.DeleteAgent)
+		agents.POST("/:paw/heartbeat", perm(entity.PermissionAgentsView), agentHandler.Heartbeat)
+	}
+
+	// Techniques - view for all, import requires permission
+	techniqueHandler := handlers.NewTechniqueHandler(services.Technique)
+	techniques := api.Group("/techniques")
+	{
+		techniques.GET("", perm(entity.PermissionTechniquesView), techniqueHandler.ListTechniques)
+		techniques.GET("/coverage", perm(entity.PermissionTechniquesView), techniqueHandler.GetCoverage)
+		techniques.GET("/tactic/:tactic", perm(entity.PermissionTechniquesView), techniqueHandler.GetByTactic)
+		techniques.GET("/platform/:platform", perm(entity.PermissionTechniquesView), techniqueHandler.GetByPlatform)
+		techniques.GET("/:id", perm(entity.PermissionTechniquesView), techniqueHandler.GetTechnique)
+		techniques.POST("/import", perm(entity.PermissionTechniquesImport), techniqueHandler.ImportTechniques)
+	}
+
+	// Executions - view for all, start/stop requires permission
+	var executionHandler *handlers.ExecutionHandler
+	if hub != nil {
+		executionHandler = handlers.NewExecutionHandlerWithHub(services.Execution, hub)
+	} else {
+		executionHandler = handlers.NewExecutionHandler(services.Execution)
+	}
+	executions := api.Group("/executions")
+	{
+		executions.GET("", perm(entity.PermissionExecutionsView), executionHandler.ListExecutions)
+		executions.GET("/:id", perm(entity.PermissionExecutionsView), executionHandler.GetExecution)
+		executions.GET("/:id/results", perm(entity.PermissionExecutionsView), executionHandler.GetResults)
+		executions.POST("", perm(entity.PermissionExecutionsStart), executionHandler.StartExecution)
+		executions.POST("/:id/stop", perm(entity.PermissionExecutionsStop), executionHandler.StopExecution)
+		executions.POST("/:id/complete", perm(entity.PermissionExecutionsView), executionHandler.CompleteExecution)
+	}
+
+	// Scenarios - view for all, create/edit/delete/import/export requires permission
+	scenarioHandler := handlers.NewScenarioHandler(services.Scenario)
+	scenarios := api.Group("/scenarios")
+	{
+		scenarios.GET("", perm(entity.PermissionScenariosView), scenarioHandler.ListScenarios)
+		scenarios.GET("/tag/:tag", perm(entity.PermissionScenariosView), scenarioHandler.GetScenariosByTag)
+		scenarios.GET("/export", perm(entity.PermissionScenariosExport), scenarioHandler.ExportScenarios)
+		scenarios.GET("/:id", perm(entity.PermissionScenariosView), scenarioHandler.GetScenario)
+		scenarios.GET("/:id/export", perm(entity.PermissionScenariosExport), scenarioHandler.ExportScenario)
+		scenarios.POST("", perm(entity.PermissionScenariosCreate), scenarioHandler.CreateScenario)
+		scenarios.POST("/import", perm(entity.PermissionScenariosImport), scenarioHandler.ImportScenarios)
+		scenarios.PUT("/:id", perm(entity.PermissionScenariosEdit), scenarioHandler.UpdateScenario)
+		scenarios.DELETE("/:id", perm(entity.PermissionScenariosDelete), scenarioHandler.DeleteScenario)
+	}
+
+	// Analytics - view/compare/export requires respective permissions
+	if services.Analytics != nil {
+		analyticsHandler := handlers.NewAnalyticsHandler(services.Analytics)
+		analytics := api.Group("/analytics")
+		{
+			analytics.GET("/period", perm(entity.PermissionAnalyticsView), analyticsHandler.GetPeriodStats)
+			analytics.GET("/comparison", perm(entity.PermissionAnalyticsCompare), analyticsHandler.CompareScores)
+			analytics.GET("/trend", perm(entity.PermissionAnalyticsView), analyticsHandler.GetScoreTrend)
+			analytics.GET("/summary", perm(entity.PermissionAnalyticsView), analyticsHandler.GetExecutionSummary)
+		}
+	}
+
+	// Notifications - requires various permissions
+	if services.Notification != nil {
+		notificationHandler := handlers.NewNotificationHandler(services.Notification)
+		notifications := api.Group("/notifications")
+		{
+			// User notifications - any authenticated user
+			notifications.GET("", notificationHandler.GetNotifications)
+			notifications.GET("/unread/count", notificationHandler.GetUnreadCount)
+			notifications.POST("/:id/read", notificationHandler.MarkAsRead)
+			notifications.POST("/read-all", notificationHandler.MarkAllAsRead)
+			// Settings - user can manage their own
+			notifications.GET("/settings", notificationHandler.GetSettings)
+			notifications.POST("/settings", notificationHandler.CreateSettings)
+			notifications.PUT("/settings/:id", notificationHandler.UpdateSettings)
+			notifications.DELETE("/settings/:id", notificationHandler.DeleteSettings)
+			// SMTP config - admin only
+			notifications.GET("/smtp", adminOnly, notificationHandler.GetSMTPConfig)
+			notifications.POST("/smtp/test", adminOnly, notificationHandler.TestSMTP)
+		}
+	}
+
+	// Schedules - view for all, create/edit/delete requires permission
+	if services.Schedule != nil {
+		scheduleHandler := handlers.NewScheduleHandler(services.Schedule)
+		schedules := api.Group("/schedules")
+		{
+			schedules.GET("", perm(entity.PermissionSchedulerView), scheduleHandler.GetAll)
+			schedules.GET("/:id", perm(entity.PermissionSchedulerView), scheduleHandler.GetByID)
+			schedules.GET("/:id/runs", perm(entity.PermissionSchedulerView), scheduleHandler.GetRuns)
+			schedules.POST("", perm(entity.PermissionSchedulerCreate), scheduleHandler.Create)
+			schedules.PUT("/:id", perm(entity.PermissionSchedulerEdit), scheduleHandler.Update)
+			schedules.DELETE("/:id", perm(entity.PermissionSchedulerDelete), scheduleHandler.Delete)
+			schedules.POST("/:id/pause", perm(entity.PermissionSchedulerEdit), scheduleHandler.Pause)
+			schedules.POST("/:id/resume", perm(entity.PermissionSchedulerEdit), scheduleHandler.Resume)
+			schedules.POST("/:id/run", perm(entity.PermissionExecutionsStart), scheduleHandler.RunNow)
+		}
+	}
+
+	logger.Info("Routes registered with permission middleware")
 }
 
 // Run starts the HTTP server

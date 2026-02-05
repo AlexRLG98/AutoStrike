@@ -143,7 +143,7 @@ Filter by platform (Windows/Linux) using the dropdown.
 
 ---
 
-## Available Techniques (Phase 2)
+## Available Techniques
 
 AutoStrike includes 15 MITRE ATT&CK techniques:
 

@@ -2,12 +2,16 @@ package application
 
 import (
 	"context"
+	"crypto/rand"
 	"database/sql"
+	"encoding/base64"
 	"errors"
+	"os"
 	"time"
 
 	"autostrike/internal/domain/entity"
 	"autostrike/internal/domain/repository"
+	"autostrike/internal/infrastructure/persistence/sqlite"
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
@@ -16,11 +20,15 @@ import (
 
 // Authentication errors
 var (
-	ErrInvalidCredentials = errors.New("invalid username or password")
-	ErrUserNotFound       = errors.New("user not found")
-	ErrInvalidToken       = errors.New("invalid token")
-	ErrTokenExpired       = errors.New("token expired")
-	ErrUserAlreadyExists  = errors.New("user already exists")
+	ErrInvalidCredentials  = errors.New("invalid username or password")
+	ErrUserNotFound        = errors.New("user not found")
+	ErrInvalidToken        = errors.New("invalid token")
+	ErrTokenExpired        = errors.New("token expired")
+	ErrUserAlreadyExists   = errors.New("user already exists")
+	ErrUserInactive        = errors.New("user account is deactivated")
+	ErrCannotDeactivateSelf = errors.New("cannot deactivate your own account")
+	ErrLastAdmin           = errors.New("cannot deactivate the last admin user")
+	ErrInvalidRole         = errors.New("invalid role")
 )
 
 // TokenResponse represents the response containing JWT tokens
@@ -61,9 +69,17 @@ func (s *AuthService) Login(ctx context.Context, username, password string) (*To
 		return nil, err
 	}
 
+	// Check if user is active
+	if !user.IsActive {
+		return nil, ErrUserInactive
+	}
+
 	if bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(password)) != nil {
 		return nil, ErrInvalidCredentials
 	}
+
+	// Update last login timestamp
+	_ = s.userRepo.UpdateLastLogin(ctx, user.ID)
 
 	return s.generateTokens(user)
 }
@@ -139,6 +155,7 @@ func (s *AuthService) CreateUser(ctx context.Context, username, email, password 
 		Email:        email,
 		PasswordHash: string(hashedPassword),
 		Role:         role,
+		IsActive:     true,
 		CreatedAt:    time.Now(),
 		UpdatedAt:    time.Now(),
 	}
@@ -150,21 +167,49 @@ func (s *AuthService) CreateUser(ctx context.Context, username, email, password 
 	return user, nil
 }
 
+// DefaultAdminResult contains information about the default admin creation
+type DefaultAdminResult struct {
+	Created           bool   // Whether a new admin was created
+	GeneratedPassword string // The password if it was auto-generated (empty if from env var or no user created)
+}
+
 // EnsureDefaultAdmin creates a default admin user if no users exist
-func (s *AuthService) EnsureDefaultAdmin(ctx context.Context) error {
+// Password is sourced from DEFAULT_ADMIN_PASSWORD env var, or a secure random password is generated
+// Returns information about whether admin was created and the generated password (if any)
+func (s *AuthService) EnsureDefaultAdmin(ctx context.Context) (*DefaultAdminResult, error) {
 	users, err := s.userRepo.FindAll(ctx)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	// If there are already users, don't create default admin
 	if len(users) > 0 {
-		return nil
+		return &DefaultAdminResult{Created: false}, nil
+	}
+
+	// Get password from environment variable or generate a secure random one
+	password := os.Getenv("DEFAULT_ADMIN_PASSWORD")
+	generatedPassword := ""
+	if password == "" {
+		// Generate a secure random password (24 bytes = 32 chars base64)
+		randomBytes := make([]byte, 24)
+		if _, err := rand.Read(randomBytes); err != nil {
+			return nil, err
+		}
+		password = base64.URLEncoding.EncodeToString(randomBytes)
+		generatedPassword = password // Track that we generated this password
 	}
 
 	// Create default admin user
-	_, err = s.CreateUser(ctx, "admin", "admin@autostrike.local", "admin123", entity.RoleAdmin)
-	return err
+	_, err = s.CreateUser(ctx, "admin", "admin@autostrike.local", password, entity.RoleAdmin)
+	if err != nil {
+		return nil, err
+	}
+
+	return &DefaultAdminResult{
+		Created:           true,
+		GeneratedPassword: generatedPassword,
+	}, nil
 }
 
 // generateTokens creates access and refresh tokens for a user
@@ -241,4 +286,177 @@ func (s *AuthService) HashPassword(password string) (string, error) {
 		return "", err
 	}
 	return string(hashed), nil
+}
+
+// ===== User Management Methods =====
+
+// GetAllUsers returns all users (for admin)
+func (s *AuthService) GetAllUsers(ctx context.Context) ([]*entity.User, error) {
+	return s.userRepo.FindAll(ctx)
+}
+
+// GetUser returns a user by ID
+func (s *AuthService) GetUser(ctx context.Context, id string) (*entity.User, error) {
+	user, err := s.userRepo.FindByID(ctx, id)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, ErrUserNotFound
+		}
+		return nil, err
+	}
+	return user, nil
+}
+
+// UpdateUser updates a user's details
+func (s *AuthService) UpdateUser(ctx context.Context, id, username, email string, role entity.UserRole) (*entity.User, error) {
+	// Validate role
+	if !entity.IsValidRole(string(role)) {
+		return nil, ErrInvalidRole
+	}
+
+	user, err := s.userRepo.FindByID(ctx, id)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, ErrUserNotFound
+		}
+		return nil, err
+	}
+
+	// Check if new username is taken by another user
+	if username != user.Username {
+		existing, err := s.userRepo.FindByUsername(ctx, username)
+		if err == nil && existing != nil && existing.ID != id {
+			return nil, ErrUserAlreadyExists
+		}
+	}
+
+	// Check if new email is taken by another user
+	if email != user.Email {
+		existing, err := s.userRepo.FindByEmail(ctx, email)
+		if err == nil && existing != nil && existing.ID != id {
+			return nil, ErrUserAlreadyExists
+		}
+	}
+
+	user.Username = username
+	user.Email = email
+	user.Role = role
+	user.UpdatedAt = time.Now()
+
+	if err := s.userRepo.Update(ctx, user); err != nil {
+		return nil, err
+	}
+
+	return user, nil
+}
+
+// UpdateUserRole updates only the user's role
+func (s *AuthService) UpdateUserRole(ctx context.Context, id string, role entity.UserRole) (*entity.User, error) {
+	// Validate role
+	if !entity.IsValidRole(string(role)) {
+		return nil, ErrInvalidRole
+	}
+
+	user, err := s.userRepo.FindByID(ctx, id)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, ErrUserNotFound
+		}
+		return nil, err
+	}
+
+	user.Role = role
+	user.UpdatedAt = time.Now()
+
+	if err := s.userRepo.Update(ctx, user); err != nil {
+		return nil, err
+	}
+
+	return user, nil
+}
+
+// DeactivateUser deactivates a user account (soft delete)
+func (s *AuthService) DeactivateUser(ctx context.Context, id, currentUserID string) error {
+	// Cannot deactivate yourself
+	if id == currentUserID {
+		return ErrCannotDeactivateSelf
+	}
+
+	// Use atomic operation to prevent race condition with concurrent admin deactivations
+	err := s.userRepo.DeactivateAdminIfNotLast(ctx, id)
+	if err != nil {
+		// Map repository errors to application errors
+		if errors.Is(err, sqlite.ErrUserNotFound) {
+			return ErrUserNotFound
+		}
+		if errors.Is(err, sqlite.ErrLastAdmin) {
+			return ErrLastAdmin
+		}
+		return err
+	}
+	return nil
+}
+
+// ReactivateUser reactivates a deactivated user account
+func (s *AuthService) ReactivateUser(ctx context.Context, id string) error {
+	user, err := s.userRepo.FindByID(ctx, id)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return ErrUserNotFound
+		}
+		return err
+	}
+
+	if user.IsActive {
+		return nil // Already active
+	}
+
+	return s.userRepo.Reactivate(ctx, id)
+}
+
+// ResetPassword resets a user's password
+func (s *AuthService) ResetPassword(ctx context.Context, id, newPassword string) error {
+	user, err := s.userRepo.FindByID(ctx, id)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return ErrUserNotFound
+		}
+		return err
+	}
+
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(newPassword), s.bcryptCost)
+	if err != nil {
+		return err
+	}
+
+	user.PasswordHash = string(hashedPassword)
+	user.UpdatedAt = time.Now()
+
+	return s.userRepo.Update(ctx, user)
+}
+
+// ChangePassword allows a user to change their own password
+func (s *AuthService) ChangePassword(ctx context.Context, userID, currentPassword, newPassword string) error {
+	user, err := s.userRepo.FindByID(ctx, userID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return ErrUserNotFound
+		}
+		return err
+	}
+
+	// Verify current password
+	if bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(currentPassword)) != nil {
+		return ErrInvalidCredentials
+	}
+
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(newPassword), s.bcryptCost)
+	if err != nil {
+		return err
+	}
+
+	user.PasswordHash = string(hashedPassword)
+	user.UpdatedAt = time.Now()
+
+	return s.userRepo.Update(ctx, user)
 }

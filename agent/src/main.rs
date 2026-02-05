@@ -37,6 +37,10 @@ struct Args {
     /// Enable debug logging
     #[arg(short, long)]
     debug: bool,
+
+    /// Agent authentication secret (X-Agent-Key header)
+    #[arg(short = 'k', long)]
+    agent_secret: Option<String>,
 }
 
 #[tokio::main]
@@ -53,7 +57,7 @@ async fn main() -> Result<()> {
     info!("AutoStrike Agent starting...");
 
     // Load configuration
-    let config = AgentConfig::load(&args.config, &args.server, args.paw)?;
+    let config = AgentConfig::load(&args.config, &args.server, args.paw, args.agent_secret)?;
     info!("Configuration loaded");
 
     // Gather system information
@@ -87,6 +91,7 @@ mod tests {
         assert!(args.paw.is_none());
         assert_eq!(args.config, "agent.yaml");
         assert!(!args.debug);
+        assert!(args.agent_secret.is_none());
     }
 
     #[test]
@@ -148,6 +153,21 @@ mod tests {
     }
 
     #[test]
+    fn test_args_with_agent_secret() {
+        let args =
+            Args::try_parse_from(["autostrike-agent", "--agent-secret", "my-secret"]).unwrap();
+
+        assert_eq!(args.agent_secret, Some("my-secret".to_string()));
+    }
+
+    #[test]
+    fn test_args_with_short_agent_secret() {
+        let args = Args::try_parse_from(["autostrike-agent", "-k", "short-secret"]).unwrap();
+
+        assert_eq!(args.agent_secret, Some("short-secret".to_string()));
+    }
+
+    #[test]
     fn test_args_all_options() {
         let args = Args::try_parse_from([
             "autostrike-agent",
@@ -158,6 +178,8 @@ mod tests {
             "-c",
             "config.yaml",
             "-d",
+            "-k",
+            "secret-key",
         ])
         .unwrap();
 
@@ -165,6 +187,7 @@ mod tests {
         assert_eq!(args.paw, Some("agent-paw".to_string()));
         assert_eq!(args.config, "config.yaml");
         assert!(args.debug);
+        assert_eq!(args.agent_secret, Some("secret-key".to_string()));
     }
 
     #[test]
@@ -176,6 +199,7 @@ mod tests {
         assert!(debug_str.contains("paw"));
         assert!(debug_str.contains("config"));
         assert!(debug_str.contains("debug"));
+        assert!(debug_str.contains("agent_secret"));
     }
 
     #[test]

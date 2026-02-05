@@ -3,6 +3,7 @@ package sqlite
 import (
 	"context"
 	"database/sql"
+	"time"
 
 	"autostrike/internal/domain/entity"
 )
@@ -94,6 +95,40 @@ func (r *ResultRepository) FindRecentExecutions(ctx context.Context, limit int) 
 		score_overall, score_blocked, score_detected, score_successful, score_total
 		FROM executions ORDER BY started_at DESC LIMIT ?
 	`, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	return r.scanExecutions(rows)
+}
+
+// FindExecutionsByDateRange finds all executions within a date range
+func (r *ResultRepository) FindExecutionsByDateRange(ctx context.Context, start, end time.Time) ([]*entity.Execution, error) {
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT id, scenario_id, status, started_at, completed_at, safe_mode,
+		score_overall, score_blocked, score_detected, score_successful, score_total
+		FROM executions
+		WHERE started_at >= ? AND started_at <= ?
+		ORDER BY started_at DESC
+	`, start, end)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	return r.scanExecutions(rows)
+}
+
+// FindCompletedExecutionsByDateRange finds completed executions within a date range
+func (r *ResultRepository) FindCompletedExecutionsByDateRange(ctx context.Context, start, end time.Time) ([]*entity.Execution, error) {
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT id, scenario_id, status, started_at, completed_at, safe_mode,
+		score_overall, score_blocked, score_detected, score_successful, score_total
+		FROM executions
+		WHERE started_at >= ? AND started_at <= ? AND status = 'completed'
+		ORDER BY started_at DESC
+	`, start, end)
 	if err != nil {
 		return nil, err
 	}

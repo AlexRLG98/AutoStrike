@@ -11,6 +11,10 @@ import Executions from './pages/Executions';
 import ExecutionDetails from './pages/ExecutionDetails';
 import Settings from './pages/Settings';
 import Matrix from './pages/Matrix';
+import Analytics from './pages/Analytics';
+import Scheduler from './pages/Scheduler';
+import AdminUsers from './pages/Admin/Users';
+import AdminPermissions from './pages/Admin/Permissions';
 
 /**
  * Root application component.
@@ -40,7 +44,49 @@ function App() {
                   <Route path="/scenarios" element={<Scenarios />} />
                   <Route path="/executions" element={<Executions />} />
                   <Route path="/executions/:id" element={<ExecutionDetails />} />
-                  <Route path="/settings" element={<Settings />} />
+                  {/* Analytics - requires analyst role or higher */}
+                  <Route
+                    path="/analytics"
+                    element={
+                      <ProtectedRoute requiredRole="analyst">
+                        <Analytics />
+                      </ProtectedRoute>
+                    }
+                  />
+                  {/* Scheduler - requires analyst role or higher to view */}
+                  <Route
+                    path="/scheduler"
+                    element={
+                      <ProtectedRoute requiredRole="analyst">
+                        <Scheduler />
+                      </ProtectedRoute>
+                    }
+                  />
+                  {/* Admin-only routes */}
+                  <Route
+                    path="/admin/users"
+                    element={
+                      <ProtectedRoute requiredRole="admin">
+                        <AdminUsers />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/admin/permissions"
+                    element={
+                      <ProtectedRoute requiredRole="admin">
+                        <AdminPermissions />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/settings"
+                    element={
+                      <ProtectedRoute requiredRole="admin">
+                        <Settings />
+                      </ProtectedRoute>
+                    }
+                  />
                 </Routes>
               </Layout>
             </ProtectedRoute>

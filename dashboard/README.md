@@ -19,10 +19,17 @@ dashboard/
 │   │   ├── Dashboard.tsx     # Vue d'ensemble, graphiques
 │   │   ├── Agents.tsx        # Gestion des agents
 │   │   ├── Techniques.tsx    # Catalogue MITRE ATT&CK
+│   │   ├── Matrix.tsx        # Matrice MITRE ATT&CK
 │   │   ├── Scenarios.tsx     # Scénarios d'attaque
 │   │   ├── Executions.tsx    # Historique des exécutions
+│   │   ├── ExecutionDetails.tsx # Détails d'une exécution
+│   │   ├── Analytics.tsx     # Tendances et rapports
+│   │   ├── Scheduler.tsx     # Planification des exécutions
 │   │   ├── Settings.tsx      # Configuration
-│   │   └── Login.tsx         # Page de connexion
+│   │   ├── Login.tsx         # Page de connexion
+│   │   └── Admin/            # Pages admin
+│   │       ├── Users.tsx     # Gestion des utilisateurs
+│   │       └── Permissions.tsx # Matrice des permissions
 │   └── lib/
 │       └── api.ts            # Client Axios + authApi
 ├── package.json
@@ -137,6 +144,31 @@ import { api } from '@/lib/api';
 - Mode safe par défaut
 - Paramètres agents (heartbeat, timeout)
 - Chemins certificats TLS
+- Paramètres de notification
+
+### Analytics (`/analytics`)
+- Graphiques de tendance du score (7j, 30j, 90j)
+- Comparaison de périodes
+- Résumé des exécutions
+- Score par tactique
+
+### Scheduler (`/scheduler`)
+- Liste des planifications
+- Création/modification de schedules
+- Fréquences (once, hourly, daily, weekly, monthly, cron)
+- Historique des exécutions par schedule
+- Pause/reprise des schedules
+
+### Admin/Users (`/admin/users`)
+- Liste des utilisateurs
+- Création/modification d'utilisateurs
+- Attribution des rôles (admin, rssi, operator, analyst, viewer)
+- Activation/désactivation
+
+### Admin/Permissions (`/admin/permissions`)
+- Matrice des permissions par rôle
+- Permissions de l'utilisateur courant
+- Catégories de permissions
 
 ## Composants UI
 

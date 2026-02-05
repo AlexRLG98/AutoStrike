@@ -141,6 +141,32 @@ func (m *mockResultRepo) FindResultsByTechnique(ctx context.Context, techniqueID
 	return result, nil
 }
 
+func (m *mockResultRepo) FindExecutionsByDateRange(ctx context.Context, start, end time.Time) ([]*entity.Execution, error) {
+	if m.err != nil {
+		return nil, m.err
+	}
+	var result []*entity.Execution
+	for _, e := range m.executions {
+		if !e.StartedAt.Before(start) && !e.StartedAt.After(end) {
+			result = append(result, e)
+		}
+	}
+	return result, nil
+}
+
+func (m *mockResultRepo) FindCompletedExecutionsByDateRange(ctx context.Context, start, end time.Time) ([]*entity.Execution, error) {
+	if m.err != nil {
+		return nil, m.err
+	}
+	var result []*entity.Execution
+	for _, e := range m.executions {
+		if e.Status == entity.ExecutionCompleted && !e.StartedAt.Before(start) && !e.StartedAt.After(end) {
+			result = append(result, e)
+		}
+	}
+	return result, nil
+}
+
 func TestNewExecutionService(t *testing.T) {
 	resultRepo := newMockResultRepo()
 	scenarioRepo := newMockScenarioRepo()

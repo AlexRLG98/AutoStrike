@@ -48,8 +48,13 @@ dashboard/
 │   │   ├── Scenarios.tsx     # Attack scenarios
 │   │   ├── Executions.tsx    # Execution history
 │   │   ├── ExecutionDetails.tsx  # Detailed execution results
+│   │   ├── Analytics.tsx     # Score trends, comparisons, reports
+│   │   ├── Scheduler.tsx     # Scheduled execution management
 │   │   ├── Settings.tsx      # Application configuration
-│   │   └── Login.tsx         # Login page
+│   │   ├── Login.tsx         # Login page
+│   │   └── Admin/            # Admin pages
+│   │       ├── Users.tsx     # User management
+│   │       └── Permissions.tsx # Permission matrix
 │   ├── lib/
 │   │   └── api.ts            # Axios client with interceptors
 │   └── types/
@@ -133,6 +138,39 @@ Configuration:
 - Default safe mode toggle
 - Agent settings (heartbeat, timeout)
 - TLS certificate paths
+- Notification settings
+
+### Analytics (`/analytics`)
+
+Security analytics:
+- Score trend charts (7d, 30d, 90d)
+- Period comparison
+- Execution summary statistics
+- Score by tactic breakdown
+
+### Scheduler (`/scheduler`)
+
+Schedule management:
+- Create/edit/delete schedules
+- Frequency options (once, hourly, daily, weekly, monthly, cron)
+- Safe mode toggle per schedule
+- Run history per schedule
+- Pause/resume schedules
+
+### Admin/Users (`/admin/users`)
+
+User management (admin only):
+- User list with roles
+- Create/edit/delete users
+- Activate/deactivate users
+- Role assignment (admin, rssi, operator, analyst, viewer)
+
+### Admin/Permissions (`/admin/permissions`)
+
+Permission matrix:
+- Role-based permission overview
+- Current user permissions display
+- Permission categories (agents, techniques, scenarios, executions, etc.)
 
 ---
 
@@ -279,14 +317,14 @@ npm run build     # Production build
 npm run preview   # Preview build
 npm run lint      # ESLint check
 npm run type-check # TypeScript check
-npm test          # Vitest tests (269 tests)
+npm test          # Vitest tests (513 tests)
 ```
 
 ---
 
 ## Testing
 
-269 tests across 21 test files:
+513 tests across 25 test files:
 
 - Component tests (Layout, MitreMatrix, RunExecutionModal)
 - Page tests (Dashboard, Agents, Techniques, Scenarios, Executions, etc.)

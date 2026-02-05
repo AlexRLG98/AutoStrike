@@ -118,6 +118,16 @@ Base URL: `https://localhost:8443/api/v1`
 | GET | `/techniques/coverage` | Statistiques de couverture |
 | POST | `/techniques/import` | Importer depuis YAML |
 
+### Scénarios
+| Méthode | Endpoint | Description |
+|---------|----------|-------------|
+| GET | `/scenarios` | Liste des scénarios |
+| GET | `/scenarios/:id` | Détails d'un scénario |
+| GET | `/scenarios/tag/:tag` | Scénarios par tag |
+| POST | `/scenarios` | Créer un scénario |
+| PUT | `/scenarios/:id` | Modifier un scénario |
+| DELETE | `/scenarios/:id` | Supprimer un scénario |
+
 ### Exécutions
 | Méthode | Endpoint | Description |
 |---------|----------|-------------|
@@ -125,7 +135,53 @@ Base URL: `https://localhost:8443/api/v1`
 | GET | `/executions/:id` | Détails d'une exécution |
 | GET | `/executions/:id/results` | Résultats d'une exécution |
 | POST | `/executions` | Démarrer une exécution |
+| POST | `/executions/:id/stop` | Arrêter une exécution |
 | POST | `/executions/:id/complete` | Terminer une exécution |
+
+### Schedules (Planification)
+| Méthode | Endpoint | Description |
+|---------|----------|-------------|
+| GET | `/schedules` | Liste des planifications |
+| GET | `/schedules/:id` | Détails d'une planification |
+| GET | `/schedules/:id/runs` | Historique des exécutions |
+| POST | `/schedules` | Créer une planification |
+| PUT | `/schedules/:id` | Modifier une planification |
+| DELETE | `/schedules/:id` | Supprimer une planification |
+| POST | `/schedules/:id/pause` | Mettre en pause |
+| POST | `/schedules/:id/resume` | Reprendre |
+
+### Notifications
+| Méthode | Endpoint | Description |
+|---------|----------|-------------|
+| GET | `/notifications` | Liste des notifications |
+| GET | `/notifications/settings` | Paramètres de notification |
+| PUT | `/notifications/settings` | Modifier les paramètres |
+| POST | `/notifications/:id/read` | Marquer comme lue |
+| POST | `/notifications/read-all` | Tout marquer comme lu |
+
+### Analytics
+| Méthode | Endpoint | Description |
+|---------|----------|-------------|
+| GET | `/analytics/trend` | Tendance du score |
+| GET | `/analytics/compare` | Comparaison de périodes |
+| GET | `/analytics/summary` | Résumé des exécutions |
+
+### Admin (Utilisateurs)
+| Méthode | Endpoint | Description |
+|---------|----------|-------------|
+| GET | `/admin/users` | Liste des utilisateurs |
+| GET | `/admin/users/:id` | Détails d'un utilisateur |
+| POST | `/admin/users` | Créer un utilisateur |
+| PUT | `/admin/users/:id` | Modifier un utilisateur |
+| DELETE | `/admin/users/:id` | Supprimer un utilisateur |
+| POST | `/admin/users/:id/activate` | Activer un utilisateur |
+| POST | `/admin/users/:id/deactivate` | Désactiver un utilisateur |
+
+### Permissions
+| Méthode | Endpoint | Description |
+|---------|----------|-------------|
+| GET | `/permissions/matrix` | Matrice des permissions |
+| GET | `/permissions/me` | Mes permissions |
 
 ## WebSocket
 

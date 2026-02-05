@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"time"
 
 	"autostrike/internal/domain/entity"
 )
@@ -49,6 +50,8 @@ type ResultRepository interface {
 	FindExecutionByID(ctx context.Context, id string) (*entity.Execution, error)
 	FindExecutionsByScenario(ctx context.Context, scenarioID string) ([]*entity.Execution, error)
 	FindRecentExecutions(ctx context.Context, limit int) ([]*entity.Execution, error)
+	FindExecutionsByDateRange(ctx context.Context, start, end time.Time) ([]*entity.Execution, error)
+	FindCompletedExecutionsByDateRange(ctx context.Context, start, end time.Time) ([]*entity.Execution, error)
 
 	CreateResult(ctx context.Context, result *entity.ExecutionResult) error
 	UpdateResult(ctx context.Context, result *entity.ExecutionResult) error
@@ -66,4 +69,47 @@ type UserRepository interface {
 	FindByUsername(ctx context.Context, username string) (*entity.User, error)
 	FindByEmail(ctx context.Context, email string) (*entity.User, error)
 	FindAll(ctx context.Context) ([]*entity.User, error)
+	FindActive(ctx context.Context) ([]*entity.User, error)
+	UpdateLastLogin(ctx context.Context, id string) error
+	Deactivate(ctx context.Context, id string) error
+	Reactivate(ctx context.Context, id string) error
+	CountByRole(ctx context.Context, role entity.UserRole) (int, error)
+	// DeactivateAdminIfNotLast atomically deactivates an admin user only if they are not the last active admin.
+	// Returns ErrLastAdmin if user is the last admin, ErrUserNotFound if user doesn't exist.
+	DeactivateAdminIfNotLast(ctx context.Context, id string) error
+}
+
+// NotificationRepository defines the interface for notification persistence
+type NotificationRepository interface {
+	// Settings
+	CreateSettings(ctx context.Context, settings *entity.NotificationSettings) error
+	UpdateSettings(ctx context.Context, settings *entity.NotificationSettings) error
+	FindSettingsByUserID(ctx context.Context, userID string) (*entity.NotificationSettings, error)
+	FindAllEnabledSettings(ctx context.Context) ([]*entity.NotificationSettings, error)
+	DeleteSettings(ctx context.Context, id string) error
+
+	// Notifications
+	CreateNotification(ctx context.Context, notification *entity.Notification) error
+	FindNotificationByID(ctx context.Context, id string) (*entity.Notification, error)
+	FindNotificationsByUserID(ctx context.Context, userID string, limit int) ([]*entity.Notification, error)
+	FindUnreadByUserID(ctx context.Context, userID string) ([]*entity.Notification, error)
+	MarkAsRead(ctx context.Context, id string) error
+	MarkAllAsRead(ctx context.Context, userID string) error
+}
+
+// ScheduleRepository defines the interface for schedule persistence
+type ScheduleRepository interface {
+	Create(ctx context.Context, schedule *entity.Schedule) error
+	Update(ctx context.Context, schedule *entity.Schedule) error
+	Delete(ctx context.Context, id string) error
+	FindByID(ctx context.Context, id string) (*entity.Schedule, error)
+	FindAll(ctx context.Context) ([]*entity.Schedule, error)
+	FindByStatus(ctx context.Context, status entity.ScheduleStatus) ([]*entity.Schedule, error)
+	FindActiveSchedulesDue(ctx context.Context, now time.Time) ([]*entity.Schedule, error)
+	FindByScenarioID(ctx context.Context, scenarioID string) ([]*entity.Schedule, error)
+
+	// Schedule runs
+	CreateRun(ctx context.Context, run *entity.ScheduleRun) error
+	UpdateRun(ctx context.Context, run *entity.ScheduleRun) error
+	FindRunsByScheduleID(ctx context.Context, scheduleID string, limit int) ([]*entity.ScheduleRun, error)
 }

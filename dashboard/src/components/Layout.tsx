@@ -7,25 +7,56 @@ import {
   Squares2X2Icon,
   DocumentTextIcon,
   PlayIcon,
+  ChartBarIcon,
+  CalendarIcon,
   Cog6ToothIcon,
   ArrowLeftStartOnRectangleIcon,
+  UsersIcon,
+  ShieldCheckIcon,
 } from '@heroicons/react/24/outline';
 import clsx from 'clsx';
 import { useAuth } from '../contexts/AuthContext';
+import { UserRole } from '../lib/api';
 
 interface LayoutProps {
   readonly children: ReactNode;
 }
 
-const navigation = [
+interface NavItem {
+  name: string;
+  href: string;
+  icon: React.ComponentType<React.SVGProps<SVGSVGElement>>;
+  minRole?: UserRole; // Minimum role required to see this item
+}
+
+// Role hierarchy: admin(5) > rssi(4) > operator(3) > analyst(2) > viewer(1)
+const roleHierarchy: Record<UserRole, number> = {
+  admin: 5,
+  rssi: 4,
+  operator: 3,
+  analyst: 2,
+  viewer: 1,
+};
+
+const navigation: NavItem[] = [
   { name: 'Dashboard', href: '/dashboard', icon: HomeIcon },
   { name: 'Agents', href: '/agents', icon: ComputerDesktopIcon },
   { name: 'Techniques', href: '/techniques', icon: ShieldExclamationIcon },
   { name: 'ATT&CK Matrix', href: '/matrix', icon: Squares2X2Icon },
   { name: 'Scenarios', href: '/scenarios', icon: DocumentTextIcon },
   { name: 'Executions', href: '/executions', icon: PlayIcon },
-  { name: 'Settings', href: '/settings', icon: Cog6ToothIcon },
+  { name: 'Analytics', href: '/analytics', icon: ChartBarIcon, minRole: 'analyst' },
+  { name: 'Scheduler', href: '/scheduler', icon: CalendarIcon, minRole: 'analyst' },
+  { name: 'Users', href: '/admin/users', icon: UsersIcon, minRole: 'admin' },
+  { name: 'Permissions', href: '/admin/permissions', icon: ShieldCheckIcon, minRole: 'admin' },
+  { name: 'Settings', href: '/settings', icon: Cog6ToothIcon, minRole: 'admin' },
 ];
+
+function hasMinRole(userRole: UserRole | undefined, minRole?: UserRole): boolean {
+  if (!minRole) return true; // No minimum role required
+  if (!userRole) return false;
+  return roleHierarchy[userRole] >= roleHierarchy[minRole];
+}
 
 export default function Layout({ children }: LayoutProps) {
   const location = useLocation();
@@ -45,24 +76,26 @@ export default function Layout({ children }: LayoutProps) {
         </div>
 
         <nav className="flex-1 px-4 space-y-1">
-          {navigation.map((item) => {
-            const isActive = location.pathname === item.href;
-            return (
-              <Link
-                key={item.name}
-                to={item.href}
-                className={clsx(
-                  'flex items-center gap-3 px-4 py-3 rounded-lg transition-colors',
-                  isActive
-                    ? 'bg-primary-600 text-white'
-                    : 'text-gray-300 hover:bg-gray-800 hover:text-white'
-                )}
-              >
-                <item.icon className="h-5 w-5" />
-                {item.name}
-              </Link>
-            );
-          })}
+          {navigation
+            .filter((item) => !authEnabled || hasMinRole(user?.role as UserRole, item.minRole))
+            .map((item) => {
+              const isActive = location.pathname === item.href;
+              return (
+                <Link
+                  key={item.name}
+                  to={item.href}
+                  className={clsx(
+                    'flex items-center gap-3 px-4 py-3 rounded-lg transition-colors',
+                    isActive
+                      ? 'bg-primary-600 text-white'
+                      : 'text-gray-300 hover:bg-gray-800 hover:text-white'
+                  )}
+                >
+                  <item.icon className="h-5 w-5" />
+                  {item.name}
+                </Link>
+              );
+            })}
         </nav>
 
         <div className="p-4 border-t border-gray-800">

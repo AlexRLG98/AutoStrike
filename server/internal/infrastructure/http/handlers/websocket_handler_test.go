@@ -1281,6 +1281,14 @@ func (m *wsTestResultRepo) FindResultsByTechnique(ctx context.Context, technique
 	return []*entity.ExecutionResult{}, nil
 }
 
+func (m *wsTestResultRepo) FindExecutionsByDateRange(ctx context.Context, start, end time.Time) ([]*entity.Execution, error) {
+	return []*entity.Execution{}, nil
+}
+
+func (m *wsTestResultRepo) FindCompletedExecutionsByDateRange(ctx context.Context, start, end time.Time) ([]*entity.Execution, error) {
+	return []*entity.Execution{}, nil
+}
+
 // Mock scenario repository
 type wsTestScenarioRepo struct{}
 

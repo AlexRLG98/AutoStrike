@@ -13,6 +13,15 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 )
 
+// Test constants for foreign key dependencies
+const (
+	testScenarioID = "scenario-1"
+	testUserID     = "user-1"
+	testAgentPaw   = "agent-1"
+	testExecID     = "exec-1"
+	testTechID     = "T1059"
+)
+
 func setupTestDB(t *testing.T) *sql.DB {
 	db, err := sql.Open("sqlite3", ":memory:")
 	if err != nil {
@@ -21,6 +30,61 @@ func setupTestDB(t *testing.T) *sql.DB {
 	if err := InitSchema(db); err != nil {
 		t.Fatalf("Failed to init schema: %v", err)
 	}
+	return db
+}
+
+// createTestScenario creates a scenario for foreign key references in tests
+func createTestScenario(t *testing.T, db *sql.DB, id string) {
+	_, err := db.Exec(`INSERT INTO scenarios (id, name, description, phases, tags, created_at, updated_at)
+		VALUES (?, 'Test Scenario', 'Test', '[]', '', datetime('now'), datetime('now'))`, id)
+	if err != nil {
+		t.Fatalf("Failed to create test scenario: %v", err)
+	}
+}
+
+// createTestUser creates a user for foreign key references in tests
+func createTestUser(t *testing.T, db *sql.DB, id string) {
+	_, err := db.Exec(`INSERT INTO users (id, username, email, password_hash, role, is_active, created_at, updated_at)
+		VALUES (?, ?, ?, 'hash', 'admin', 1, datetime('now'), datetime('now'))`, id, "user_"+id, id+"@test.com")
+	if err != nil {
+		t.Fatalf("Failed to create test user: %v", err)
+	}
+}
+
+// createTestTechnique creates a technique for foreign key references in tests
+func createTestTechnique(t *testing.T, db *sql.DB, id string) {
+	_, err := db.Exec(`INSERT INTO techniques (id, name, description, tactic, platforms, executors, detection, is_safe, created_at)
+		VALUES (?, 'Test Technique', 'Test', 'discovery', '["linux"]', '["sh"]', '', 1, datetime('now'))`, id)
+	if err != nil {
+		t.Fatalf("Failed to create test technique: %v", err)
+	}
+}
+
+// createTestAgent creates an agent for foreign key references in tests
+func createTestAgent(t *testing.T, db *sql.DB, paw string) {
+	_, err := db.Exec(`INSERT INTO agents (paw, hostname, username, platform, executors, status, last_seen, created_at)
+		VALUES (?, 'testhost', 'testuser', 'linux', '["sh"]', 'online', datetime('now'), datetime('now'))`, paw)
+	if err != nil {
+		t.Fatalf("Failed to create test agent: %v", err)
+	}
+}
+
+// createTestExecution creates an execution for foreign key references in tests
+func createTestExecution(t *testing.T, db *sql.DB, id, scenarioID string) {
+	_, err := db.Exec(`INSERT INTO executions (id, scenario_id, status, started_at, safe_mode)
+		VALUES (?, ?, 'running', datetime('now'), 1)`, id, scenarioID)
+	if err != nil {
+		t.Fatalf("Failed to create test execution: %v", err)
+	}
+}
+
+// setupTestDBWithFKData sets up test DB with common foreign key dependencies
+func setupTestDBWithFKData(t *testing.T) *sql.DB {
+	db := setupTestDB(t)
+	createTestScenario(t, db, testScenarioID)
+	createTestUser(t, db, testUserID)
+	createTestTechnique(t, db, testTechID)
+	createTestAgent(t, db, testAgentPaw)
 	return db
 }
 
@@ -808,6 +872,9 @@ func TestResultRepository_CreateExecution(t *testing.T) {
 	repo := NewResultRepository(db)
 	ctx := context.Background()
 
+	// Create scenario first for foreign key constraint
+	createTestScenario(t, db, "s1")
+
 	exec := &entity.Execution{
 		ID:         "e1",
 		ScenarioID: "s1",
@@ -827,6 +894,9 @@ func TestResultRepository_FindExecutionByID(t *testing.T) {
 	defer db.Close()
 	repo := NewResultRepository(db)
 	ctx := context.Background()
+
+	// Create scenario first for foreign key constraint
+	createTestScenario(t, db, "s1")
 
 	exec := &entity.Execution{
 		ID:         "e1",
@@ -863,6 +933,9 @@ func TestResultRepository_UpdateExecution(t *testing.T) {
 	repo := NewResultRepository(db)
 	ctx := context.Background()
 
+	// Create scenario first for foreign key constraint
+	createTestScenario(t, db, "s1")
+
 	exec := &entity.Execution{
 		ID:         "e1",
 		ScenarioID: "s1",
@@ -893,6 +966,10 @@ func TestResultRepository_FindExecutionsByScenario(t *testing.T) {
 	repo := NewResultRepository(db)
 	ctx := context.Background()
 
+	// Create scenarios first for foreign key constraint
+	createTestScenario(t, db, "s1")
+	createTestScenario(t, db, "s2")
+
 	for i := 0; i < 2; i++ {
 		exec := &entity.Execution{
 			ID:         "e" + string(rune('0'+i)),
@@ -900,7 +977,7 @@ func TestResultRepository_FindExecutionsByScenario(t *testing.T) {
 			Status:     entity.ExecutionCompleted,
 			StartedAt:  time.Now(),
 		}
-	_ = repo.CreateExecution(ctx, exec)
+		_ = repo.CreateExecution(ctx, exec)
 	}
 	exec3 := &entity.Execution{
 		ID:         "e3",
@@ -925,6 +1002,9 @@ func TestResultRepository_FindRecentExecutions(t *testing.T) {
 	repo := NewResultRepository(db)
 	ctx := context.Background()
 
+	// Create scenario first for foreign key constraint
+	createTestScenario(t, db, "s1")
+
 	for i := 0; i < 5; i++ {
 		exec := &entity.Execution{
 			ID:         "e" + string(rune('0'+i)),
@@ -932,7 +1012,7 @@ func TestResultRepository_FindRecentExecutions(t *testing.T) {
 			Status:     entity.ExecutionCompleted,
 			StartedAt:  time.Now(),
 		}
-	_ = repo.CreateExecution(ctx, exec)
+		_ = repo.CreateExecution(ctx, exec)
 	}
 
 	executions, err := repo.FindRecentExecutions(ctx, 3)
@@ -949,6 +1029,12 @@ func TestResultRepository_CreateResult(t *testing.T) {
 	defer db.Close()
 	repo := NewResultRepository(db)
 	ctx := context.Background()
+
+	// Create foreign key dependencies
+	createTestScenario(t, db, "s1")
+	createTestExecution(t, db, "e1", "s1")
+	createTestTechnique(t, db, "T1059")
+	createTestAgent(t, db, "paw1")
 
 	result := &entity.ExecutionResult{
 		ID:          "r1",
@@ -970,6 +1056,12 @@ func TestResultRepository_UpdateResult(t *testing.T) {
 	defer db.Close()
 	repo := NewResultRepository(db)
 	ctx := context.Background()
+
+	// Create foreign key dependencies
+	createTestScenario(t, db, "s1")
+	createTestExecution(t, db, "e1", "s1")
+	createTestTechnique(t, db, "T1059")
+	createTestAgent(t, db, "paw1")
 
 	result := &entity.ExecutionResult{
 		ID:          "r1",
@@ -998,6 +1090,12 @@ func TestResultRepository_FindResultsByExecution(t *testing.T) {
 	repo := NewResultRepository(db)
 	ctx := context.Background()
 
+	// Create foreign key dependencies
+	createTestScenario(t, db, "s1")
+	createTestExecution(t, db, "e1", "s1")
+	createTestTechnique(t, db, "T1059")
+	createTestAgent(t, db, "paw1")
+
 	for i := 0; i < 3; i++ {
 		result := &entity.ExecutionResult{
 			ID:          "r" + string(rune('0'+i)),
@@ -1007,7 +1105,7 @@ func TestResultRepository_FindResultsByExecution(t *testing.T) {
 			Status:      entity.StatusSuccess,
 			StartedAt:   time.Now(),
 		}
-	_ = repo.CreateResult(ctx, result)
+		_ = repo.CreateResult(ctx, result)
 	}
 
 	results, err := repo.FindResultsByExecution(ctx, "e1")
@@ -1024,6 +1122,13 @@ func TestResultRepository_FindResultsByTechnique(t *testing.T) {
 	defer db.Close()
 	repo := NewResultRepository(db)
 	ctx := context.Background()
+
+	// Create foreign key dependencies
+	createTestScenario(t, db, "s1")
+	createTestExecution(t, db, "e1", "s1")
+	createTestTechnique(t, db, "T1059")
+	createTestTechnique(t, db, "T1055")
+	createTestAgent(t, db, "paw1")
 
 	r1 := &entity.ExecutionResult{
 		ID: "r1", ExecutionID: "e1", TechniqueID: "T1059",
@@ -1357,6 +1462,9 @@ func TestResultRepository_FindRecentExecutions_WithScore(t *testing.T) {
 	repo := NewResultRepository(db)
 	ctx := context.Background()
 
+	// Create scenario first for foreign key constraint
+	createTestScenario(t, db, "s1")
+
 	// Insert execution with score (using correct schema columns)
 	_, err := db.Exec(`
 		INSERT INTO executions (id, scenario_id, status, started_at, completed_at, safe_mode,
@@ -1384,6 +1492,9 @@ func TestResultRepository_FindExecutionsByScenario_WithResults(t *testing.T) {
 	defer db.Close()
 	repo := NewResultRepository(db)
 	ctx := context.Background()
+
+	// Create scenario first for foreign key constraint
+	createTestScenario(t, db, "scenario-1")
 
 	// Insert multiple executions for same scenario
 	for i := 0; i < 3; i++ {
@@ -1645,6 +1756,12 @@ func TestResultRepository_FindResultByID(t *testing.T) {
 	defer db.Close()
 	repo := NewResultRepository(db)
 	ctx := context.Background()
+
+	// Create foreign key dependencies
+	createTestScenario(t, db, "s1")
+	createTestExecution(t, db, "exec-1", "s1")
+	createTestTechnique(t, db, "T1059")
+	createTestAgent(t, db, "agent-1")
 
 	now := time.Now()
 	result := &entity.ExecutionResult{
@@ -2143,5 +2260,1324 @@ func TestUserRepository_AllRoles(t *testing.T) {
 		if found.Role != role {
 			t.Errorf("Expected role %s, got %s", role, found.Role)
 		}
+	}
+}
+
+func TestUserRepository_FindActive(t *testing.T) {
+	db := setupTestDB(t)
+	defer db.Close()
+	repo := NewUserRepository(db)
+	ctx := context.Background()
+
+	// Create active user
+	active := &entity.User{
+		ID:           "user-active",
+		Username:     "activeuser",
+		Email:        "active@example.com",
+		PasswordHash: "$2a$10$hash",
+		Role:         entity.RoleOperator,
+		IsActive:     true,
+	}
+	_ = repo.Create(ctx, active)
+
+	// Create inactive user using Deactivate after creation
+	inactive := &entity.User{
+		ID:           "user-inactive",
+		Username:     "inactiveuser",
+		Email:        "inactive@example.com",
+		PasswordHash: "$2a$10$hash",
+		Role:         entity.RoleViewer,
+		IsActive:     true, // Create as active first
+	}
+	_ = repo.Create(ctx, inactive)
+	_ = repo.Deactivate(ctx, inactive.ID) // Then deactivate
+
+	users, err := repo.FindActive(ctx)
+	if err != nil {
+		t.Fatalf("FindActive failed: %v", err)
+	}
+
+	// Should only have the active user
+	found := false
+	for _, u := range users {
+		if u.ID == "user-active" {
+			found = true
+		}
+		if u.ID == "user-inactive" {
+			t.Error("Inactive user should not be in FindActive results")
+		}
+	}
+	if !found {
+		t.Error("Active user not found in FindActive results")
+	}
+}
+
+func TestUserRepository_UpdateLastLogin(t *testing.T) {
+	db := setupTestDB(t)
+	defer db.Close()
+	repo := NewUserRepository(db)
+	ctx := context.Background()
+
+	user := &entity.User{
+		ID:           "user-login",
+		Username:     "loginuser",
+		Email:        "login@example.com",
+		PasswordHash: "$2a$10$hash",
+		Role:         entity.RoleOperator,
+	}
+	_ = repo.Create(ctx, user)
+
+	err := repo.UpdateLastLogin(ctx, "user-login")
+	if err != nil {
+		t.Fatalf("UpdateLastLogin failed: %v", err)
+	}
+
+	found, _ := repo.FindByID(ctx, "user-login")
+	if found.LastLoginAt == nil {
+		t.Error("Expected LastLoginAt to be set")
+	}
+}
+
+func TestUserRepository_Deactivate(t *testing.T) {
+	db := setupTestDB(t)
+	defer db.Close()
+	repo := NewUserRepository(db)
+	ctx := context.Background()
+
+	user := &entity.User{
+		ID:           "user-deactivate",
+		Username:     "deactivateuser",
+		Email:        "deactivate@example.com",
+		PasswordHash: "$2a$10$hash",
+		Role:         entity.RoleOperator,
+		IsActive:     true,
+	}
+	_ = repo.Create(ctx, user)
+
+	err := repo.Deactivate(ctx, "user-deactivate")
+	if err != nil {
+		t.Fatalf("Deactivate failed: %v", err)
+	}
+
+	found, _ := repo.FindByID(ctx, "user-deactivate")
+	if found.IsActive {
+		t.Error("Expected user to be deactivated")
+	}
+}
+
+func TestUserRepository_Reactivate(t *testing.T) {
+	db := setupTestDB(t)
+	defer db.Close()
+	repo := NewUserRepository(db)
+	ctx := context.Background()
+
+	user := &entity.User{
+		ID:           "user-reactivate",
+		Username:     "reactivateuser",
+		Email:        "reactivate@example.com",
+		PasswordHash: "$2a$10$hash",
+		Role:         entity.RoleOperator,
+		IsActive:     false,
+	}
+	_ = repo.Create(ctx, user)
+
+	err := repo.Reactivate(ctx, "user-reactivate")
+	if err != nil {
+		t.Fatalf("Reactivate failed: %v", err)
+	}
+
+	found, _ := repo.FindByID(ctx, "user-reactivate")
+	if !found.IsActive {
+		t.Error("Expected user to be reactivated")
+	}
+}
+
+func TestUserRepository_CountByRole(t *testing.T) {
+	db := setupTestDB(t)
+	defer db.Close()
+	repo := NewUserRepository(db)
+	ctx := context.Background()
+
+	// Create users with different roles
+	for i := 0; i < 3; i++ {
+		user := &entity.User{
+			ID:           "admin-" + string(rune('a'+i)),
+			Username:     "admin" + string(rune('a'+i)),
+			Email:        "admin" + string(rune('a'+i)) + "@example.com",
+			PasswordHash: "$2a$10$hash",
+			Role:         entity.RoleAdmin,
+			IsActive:     true,
+		}
+		_ = repo.Create(ctx, user)
+	}
+
+	operator := &entity.User{
+		ID:           "operator-1",
+		Username:     "operator1",
+		Email:        "operator1@example.com",
+		PasswordHash: "$2a$10$hash",
+		Role:         entity.RoleOperator,
+		IsActive:     true,
+	}
+	_ = repo.Create(ctx, operator)
+
+	count, err := repo.CountByRole(ctx, entity.RoleAdmin)
+	if err != nil {
+		t.Fatalf("CountByRole failed: %v", err)
+	}
+	if count != 3 {
+		t.Errorf("Expected 3 admins, got %d", count)
+	}
+
+	count, err = repo.CountByRole(ctx, entity.RoleOperator)
+	if err != nil {
+		t.Fatalf("CountByRole failed: %v", err)
+	}
+	if count != 1 {
+		t.Errorf("Expected 1 operator, got %d", count)
+	}
+}
+
+func TestUserRepository_DeactivateAdminIfNotLast_Success(t *testing.T) {
+	db := setupTestDB(t)
+	defer db.Close()
+	repo := NewUserRepository(db)
+	ctx := context.Background()
+
+	// Create two admin users
+	admin1 := &entity.User{
+		ID:           "admin-1",
+		Username:     "admin1",
+		Email:        "admin1@example.com",
+		PasswordHash: "$2a$10$hash",
+		Role:         entity.RoleAdmin,
+		IsActive:     true,
+	}
+	admin2 := &entity.User{
+		ID:           "admin-2",
+		Username:     "admin2",
+		Email:        "admin2@example.com",
+		PasswordHash: "$2a$10$hash",
+		Role:         entity.RoleAdmin,
+		IsActive:     true,
+	}
+	_ = repo.Create(ctx, admin1)
+	_ = repo.Create(ctx, admin2)
+
+	// Should succeed because there's another admin
+	err := repo.DeactivateAdminIfNotLast(ctx, "admin-1")
+	if err != nil {
+		t.Fatalf("DeactivateAdminIfNotLast failed: %v", err)
+	}
+
+	// Verify user is deactivated
+	found, _ := repo.FindByID(ctx, "admin-1")
+	if found.IsActive {
+		t.Error("Expected user to be deactivated")
+	}
+}
+
+func TestUserRepository_DeactivateAdminIfNotLast_LastAdmin(t *testing.T) {
+	db := setupTestDB(t)
+	defer db.Close()
+	repo := NewUserRepository(db)
+	ctx := context.Background()
+
+	// Create only one admin user
+	admin := &entity.User{
+		ID:           "admin-1",
+		Username:     "admin1",
+		Email:        "admin1@example.com",
+		PasswordHash: "$2a$10$hash",
+		Role:         entity.RoleAdmin,
+		IsActive:     true,
+	}
+	_ = repo.Create(ctx, admin)
+
+	// Should fail because it's the last admin
+	err := repo.DeactivateAdminIfNotLast(ctx, "admin-1")
+	if err == nil {
+		t.Error("Expected error when deactivating last admin")
+	}
+	if err != ErrLastAdmin {
+		t.Errorf("Expected ErrLastAdmin, got %v", err)
+	}
+
+	// Verify user is still active
+	found, _ := repo.FindByID(ctx, "admin-1")
+	if !found.IsActive {
+		t.Error("Expected user to still be active")
+	}
+}
+
+func TestUserRepository_DeactivateAdminIfNotLast_NotFound(t *testing.T) {
+	db := setupTestDB(t)
+	defer db.Close()
+	repo := NewUserRepository(db)
+	ctx := context.Background()
+
+	err := repo.DeactivateAdminIfNotLast(ctx, "nonexistent")
+	if err == nil {
+		t.Error("Expected error when user not found")
+	}
+	if err != ErrUserNotFound {
+		t.Errorf("Expected ErrUserNotFound, got %v", err)
+	}
+}
+
+func TestUserRepository_DeactivateAdminIfNotLast_NonAdmin(t *testing.T) {
+	db := setupTestDB(t)
+	defer db.Close()
+	repo := NewUserRepository(db)
+	ctx := context.Background()
+
+	// Create a non-admin user
+	user := &entity.User{
+		ID:           "user-1",
+		Username:     "user1",
+		Email:        "user1@example.com",
+		PasswordHash: "$2a$10$hash",
+		Role:         entity.RoleOperator,
+		IsActive:     true,
+	}
+	_ = repo.Create(ctx, user)
+
+	// Should succeed for non-admin (no admin count check needed)
+	err := repo.DeactivateAdminIfNotLast(ctx, "user-1")
+	if err != nil {
+		t.Fatalf("DeactivateAdminIfNotLast failed for non-admin: %v", err)
+	}
+
+	// Verify user is deactivated
+	found, _ := repo.FindByID(ctx, "user-1")
+	if found.IsActive {
+		t.Error("Expected user to be deactivated")
+	}
+}
+
+func TestUserRepository_DeactivateAdminIfNotLast_AlreadyInactive(t *testing.T) {
+	db := setupTestDB(t)
+	defer db.Close()
+	repo := NewUserRepository(db)
+	ctx := context.Background()
+
+	// Create two admin users, one inactive
+	admin1 := &entity.User{
+		ID:           "admin-1",
+		Username:     "admin1",
+		Email:        "admin1@example.com",
+		PasswordHash: "$2a$10$hash",
+		Role:         entity.RoleAdmin,
+		IsActive:     false, // Already inactive
+	}
+	admin2 := &entity.User{
+		ID:           "admin-2",
+		Username:     "admin2",
+		Email:        "admin2@example.com",
+		PasswordHash: "$2a$10$hash",
+		Role:         entity.RoleAdmin,
+		IsActive:     true,
+	}
+	_ = repo.Create(ctx, admin1)
+	_ = repo.Create(ctx, admin2)
+
+	// Deactivating already inactive user should succeed (idempotent)
+	err := repo.DeactivateAdminIfNotLast(ctx, "admin-1")
+	if err != nil {
+		t.Fatalf("DeactivateAdminIfNotLast failed: %v", err)
+	}
+}
+
+// Schedule Repository tests
+func TestNewScheduleRepository(t *testing.T) {
+	db := setupTestDB(t)
+	defer db.Close()
+
+	repo := NewScheduleRepository(db)
+	if repo == nil {
+		t.Error("Expected non-nil repository")
+	}
+}
+
+func TestScheduleRepository_Create(t *testing.T) {
+	db := setupTestDB(t)
+	defer db.Close()
+	repo := NewScheduleRepository(db)
+	ctx := context.Background()
+
+	// Create foreign key dependencies
+	createTestScenario(t, db, "scenario-1")
+	createTestUser(t, db, "user-1")
+
+	now := time.Now()
+	schedule := &entity.Schedule{
+		ID:          "sched-1",
+		Name:        "Test Schedule",
+		Description: "A test schedule",
+		ScenarioID:  "scenario-1",
+		AgentPaw:    "agent-1",
+		Frequency:   entity.FrequencyDaily,
+		SafeMode:    true,
+		Status:      entity.ScheduleStatusActive,
+		CreatedBy:   "user-1",
+		CreatedAt:   now,
+		UpdatedAt:   now,
+	}
+
+	err := repo.Create(ctx, schedule)
+	if err != nil {
+		t.Fatalf("Create failed: %v", err)
+	}
+}
+
+func TestScheduleRepository_FindByID(t *testing.T) {
+	db := setupTestDB(t)
+	defer db.Close()
+	repo := NewScheduleRepository(db)
+	ctx := context.Background()
+
+	// Create foreign key dependencies
+	createTestScenario(t, db, "scenario-1")
+	createTestUser(t, db, "user-1")
+
+	now := time.Now()
+	schedule := &entity.Schedule{
+		ID:          "sched-find",
+		Name:        "Find Test",
+		ScenarioID:  "scenario-1",
+		Frequency:   entity.FrequencyHourly,
+		Status:      entity.ScheduleStatusActive,
+		CreatedBy:   "user-1",
+		CreatedAt:   now,
+		UpdatedAt:   now,
+	}
+	_ = repo.Create(ctx, schedule)
+
+	found, err := repo.FindByID(ctx, "sched-find")
+	if err != nil {
+		t.Fatalf("FindByID failed: %v", err)
+	}
+	if found == nil {
+		t.Fatal("FindByID returned nil")
+	}
+	if found.Name != "Find Test" {
+		t.Errorf("Expected name 'Find Test', got '%s'", found.Name)
+	}
+}
+
+func TestScheduleRepository_FindByID_NotFound(t *testing.T) {
+	db := setupTestDB(t)
+	defer db.Close()
+	repo := NewScheduleRepository(db)
+	ctx := context.Background()
+
+	found, err := repo.FindByID(ctx, "nonexistent")
+	if err == nil && found != nil {
+		t.Error("Expected error or nil for nonexistent schedule")
+	}
+}
+
+func TestScheduleRepository_Update(t *testing.T) {
+	db := setupTestDB(t)
+	defer db.Close()
+	repo := NewScheduleRepository(db)
+	ctx := context.Background()
+
+	// Create foreign key dependencies
+	createTestScenario(t, db, "scenario-1")
+	createTestUser(t, db, "user-1")
+
+	now := time.Now()
+	schedule := &entity.Schedule{
+		ID:          "sched-update",
+		Name:        "Original Name",
+		ScenarioID:  "scenario-1",
+		Frequency:   entity.FrequencyDaily,
+		Status:      entity.ScheduleStatusActive,
+		CreatedBy:   "user-1",
+		CreatedAt:   now,
+		UpdatedAt:   now,
+	}
+	_ = repo.Create(ctx, schedule)
+
+	schedule.Name = "Updated Name"
+	schedule.Frequency = entity.FrequencyHourly
+	schedule.UpdatedAt = time.Now()
+
+	err := repo.Update(ctx, schedule)
+	if err != nil {
+		t.Fatalf("Update failed: %v", err)
+	}
+
+	found, _ := repo.FindByID(ctx, "sched-update")
+	if found.Name != "Updated Name" {
+		t.Errorf("Expected name 'Updated Name', got '%s'", found.Name)
+	}
+	if found.Frequency != entity.FrequencyHourly {
+		t.Errorf("Expected frequency 'hourly', got '%s'", found.Frequency)
+	}
+}
+
+func TestScheduleRepository_Delete(t *testing.T) {
+	db := setupTestDB(t)
+	defer db.Close()
+	repo := NewScheduleRepository(db)
+	ctx := context.Background()
+
+	now := time.Now()
+	schedule := &entity.Schedule{
+		ID:         "sched-delete",
+		Name:       "Delete Test",
+		ScenarioID: "scenario-1",
+		Frequency:  entity.FrequencyDaily,
+		Status:     entity.ScheduleStatusActive,
+		CreatedBy:  "user-1",
+		CreatedAt:  now,
+		UpdatedAt:  now,
+	}
+	_ = repo.Create(ctx, schedule)
+
+	err := repo.Delete(ctx, "sched-delete")
+	if err != nil {
+		t.Fatalf("Delete failed: %v", err)
+	}
+
+	found, _ := repo.FindByID(ctx, "sched-delete")
+	if found != nil {
+		t.Error("Expected schedule to be deleted")
+	}
+}
+
+func TestScheduleRepository_FindAll(t *testing.T) {
+	db := setupTestDBWithFKData(t)
+	defer db.Close()
+	repo := NewScheduleRepository(db)
+	ctx := context.Background()
+
+	now := time.Now()
+	for i := 0; i < 3; i++ {
+		schedule := &entity.Schedule{
+			ID:         "sched-all-" + string(rune('a'+i)),
+			Name:       "Schedule " + string(rune('a'+i)),
+			ScenarioID: "scenario-1",
+			Frequency:  entity.FrequencyDaily,
+			Status:     entity.ScheduleStatusActive,
+			CreatedBy:  "user-1",
+			CreatedAt:  now,
+			UpdatedAt:  now,
+		}
+		_ = repo.Create(ctx, schedule)
+	}
+
+	schedules, err := repo.FindAll(ctx)
+	if err != nil {
+		t.Fatalf("FindAll failed: %v", err)
+	}
+	if len(schedules) != 3 {
+		t.Errorf("Expected 3 schedules, got %d", len(schedules))
+	}
+}
+
+func TestScheduleRepository_FindByStatus(t *testing.T) {
+	db := setupTestDB(t)
+	defer db.Close()
+	repo := NewScheduleRepository(db)
+	ctx := context.Background()
+
+	// Create foreign key dependencies
+	createTestScenario(t, db, "s1")
+	createTestUser(t, db, testUserID)
+
+	now := time.Now()
+	active := &entity.Schedule{
+		ID: "sched-active", Name: "Active", ScenarioID: "s1",
+		Frequency: entity.FrequencyDaily, Status: entity.ScheduleStatusActive,
+		CreatedBy: "user-1", CreatedAt: now, UpdatedAt: now,
+	}
+	paused := &entity.Schedule{
+		ID: "sched-paused", Name: "Paused", ScenarioID: "s1",
+		Frequency: entity.FrequencyDaily, Status: entity.ScheduleStatusPaused,
+		CreatedBy: "user-1", CreatedAt: now, UpdatedAt: now,
+	}
+	_ = repo.Create(ctx, active)
+	_ = repo.Create(ctx, paused)
+
+	schedules, err := repo.FindByStatus(ctx, entity.ScheduleStatusActive)
+	if err != nil {
+		t.Fatalf("FindByStatus failed: %v", err)
+	}
+	if len(schedules) != 1 {
+		t.Errorf("Expected 1 active schedule, got %d", len(schedules))
+	}
+}
+
+func TestScheduleRepository_FindActiveSchedulesDue(t *testing.T) {
+	db := setupTestDB(t)
+	defer db.Close()
+	repo := NewScheduleRepository(db)
+	ctx := context.Background()
+
+	// Create foreign key dependencies
+	createTestScenario(t, db, "s1")
+	createTestUser(t, db, testUserID)
+
+	now := time.Now()
+	pastTime := now.Add(-1 * time.Hour)
+	futureTime := now.Add(1 * time.Hour)
+
+	due := &entity.Schedule{
+		ID: "sched-due", Name: "Due", ScenarioID: "s1",
+		Frequency: entity.FrequencyDaily, Status: entity.ScheduleStatusActive,
+		NextRunAt: &pastTime, CreatedBy: "user-1", CreatedAt: now, UpdatedAt: now,
+	}
+	notDue := &entity.Schedule{
+		ID: "sched-not-due", Name: "Not Due", ScenarioID: "s1",
+		Frequency: entity.FrequencyDaily, Status: entity.ScheduleStatusActive,
+		NextRunAt: &futureTime, CreatedBy: "user-1", CreatedAt: now, UpdatedAt: now,
+	}
+	paused := &entity.Schedule{
+		ID: "sched-paused-due", Name: "Paused Due", ScenarioID: "s1",
+		Frequency: entity.FrequencyDaily, Status: entity.ScheduleStatusPaused,
+		NextRunAt: &pastTime, CreatedBy: "user-1", CreatedAt: now, UpdatedAt: now,
+	}
+	_ = repo.Create(ctx, due)
+	_ = repo.Create(ctx, notDue)
+	_ = repo.Create(ctx, paused)
+
+	schedules, err := repo.FindActiveSchedulesDue(ctx, now)
+	if err != nil {
+		t.Fatalf("FindActiveSchedulesDue failed: %v", err)
+	}
+	if len(schedules) != 1 {
+		t.Errorf("Expected 1 due schedule, got %d", len(schedules))
+	}
+}
+
+func TestScheduleRepository_FindByScenarioID(t *testing.T) {
+	db := setupTestDB(t)
+	defer db.Close()
+	repo := NewScheduleRepository(db)
+	ctx := context.Background()
+
+	// Create foreign key dependencies
+	createTestScenario(t, db, "scenario-target")
+	createTestScenario(t, db, "scenario-other")
+	createTestUser(t, db, testUserID)
+
+	now := time.Now()
+	for i := 0; i < 2; i++ {
+		schedule := &entity.Schedule{
+			ID: "sched-scenario-" + string(rune('a'+i)), Name: "Schedule",
+			ScenarioID: "scenario-target", Frequency: entity.FrequencyDaily,
+			Status: entity.ScheduleStatusActive, CreatedBy: testUserID,
+			CreatedAt: now, UpdatedAt: now,
+		}
+		_ = repo.Create(ctx, schedule)
+	}
+	other := &entity.Schedule{
+		ID: "sched-other", Name: "Other", ScenarioID: "scenario-other",
+		Frequency: entity.FrequencyDaily, Status: entity.ScheduleStatusActive,
+		CreatedBy: testUserID, CreatedAt: now, UpdatedAt: now,
+	}
+	_ = repo.Create(ctx, other)
+
+	schedules, err := repo.FindByScenarioID(ctx, "scenario-target")
+	if err != nil {
+		t.Fatalf("FindByScenarioID failed: %v", err)
+	}
+	if len(schedules) != 2 {
+		t.Errorf("Expected 2 schedules, got %d", len(schedules))
+	}
+}
+
+func TestScheduleRepository_CreateRun(t *testing.T) {
+	db := setupTestDB(t)
+	defer db.Close()
+	repo := NewScheduleRepository(db)
+	ctx := context.Background()
+
+	// Create foreign key dependencies
+	createTestScenario(t, db, "s1")
+	createTestUser(t, db, testUserID)
+	createTestExecution(t, db, testExecID, "s1")
+
+	now := time.Now()
+	schedule := &entity.Schedule{
+		ID: "sched-run-test", Name: "Run Test", ScenarioID: "s1",
+		Frequency: entity.FrequencyDaily, Status: entity.ScheduleStatusActive,
+		CreatedBy: testUserID, CreatedAt: now, UpdatedAt: now,
+	}
+	_ = repo.Create(ctx, schedule)
+
+	run := &entity.ScheduleRun{
+		ID:          "run-1",
+		ScheduleID:  "sched-run-test",
+		ExecutionID: testExecID,
+		StartedAt:   now,
+		Status:      "running",
+	}
+
+	err := repo.CreateRun(ctx, run)
+	if err != nil {
+		t.Fatalf("CreateRun failed: %v", err)
+	}
+}
+
+func TestScheduleRepository_CreateRun_NoExecutionID(t *testing.T) {
+	db := setupTestDB(t)
+	defer db.Close()
+	repo := NewScheduleRepository(db)
+	ctx := context.Background()
+
+	// Create foreign key dependencies
+	createTestScenario(t, db, "s1")
+	createTestUser(t, db, testUserID)
+
+	now := time.Now()
+	schedule := &entity.Schedule{
+		ID: "sched-run-no-exec", Name: "Run No Exec", ScenarioID: "s1",
+		Frequency: entity.FrequencyDaily, Status: entity.ScheduleStatusActive,
+		CreatedBy: testUserID, CreatedAt: now, UpdatedAt: now,
+	}
+	_ = repo.Create(ctx, schedule)
+
+	run := &entity.ScheduleRun{
+		ID:          "run-no-exec",
+		ScheduleID:  "sched-run-no-exec",
+		ExecutionID: "", // No execution ID for failed runs
+		StartedAt:   now,
+		Status:      "failed",
+		Error:       "connection error",
+	}
+
+	err := repo.CreateRun(ctx, run)
+	if err != nil {
+		t.Fatalf("CreateRun failed: %v", err)
+	}
+}
+
+func TestScheduleRepository_UpdateRun(t *testing.T) {
+	db := setupTestDB(t)
+	defer db.Close()
+	repo := NewScheduleRepository(db)
+	ctx := context.Background()
+
+	now := time.Now()
+	schedule := &entity.Schedule{
+		ID: "sched-update-run", Name: "Update Run", ScenarioID: "s1",
+		Frequency: entity.FrequencyDaily, Status: entity.ScheduleStatusActive,
+		CreatedBy: "user-1", CreatedAt: now, UpdatedAt: now,
+	}
+	_ = repo.Create(ctx, schedule)
+
+	run := &entity.ScheduleRun{
+		ID:          "run-update",
+		ScheduleID:  "sched-update-run",
+		ExecutionID: "exec-1",
+		StartedAt:   now,
+		Status:      "running",
+	}
+	_ = repo.CreateRun(ctx, run)
+
+	completedAt := now.Add(5 * time.Minute)
+	run.CompletedAt = &completedAt
+	run.Status = "completed"
+
+	err := repo.UpdateRun(ctx, run)
+	if err != nil {
+		t.Fatalf("UpdateRun failed: %v", err)
+	}
+}
+
+func TestScheduleRepository_FindRunsByScheduleID(t *testing.T) {
+	db := setupTestDB(t)
+	defer db.Close()
+	repo := NewScheduleRepository(db)
+	ctx := context.Background()
+
+	// Create foreign key dependencies
+	createTestScenario(t, db, "s1")
+	createTestUser(t, db, testUserID)
+
+	now := time.Now()
+	schedule := &entity.Schedule{
+		ID: "sched-find-runs", Name: "Find Runs", ScenarioID: "s1",
+		Frequency: entity.FrequencyDaily, Status: entity.ScheduleStatusActive,
+		CreatedBy: testUserID, CreatedAt: now, UpdatedAt: now,
+	}
+	_ = repo.Create(ctx, schedule)
+
+	for i := 0; i < 3; i++ {
+		run := &entity.ScheduleRun{
+			ID:          "run-find-" + string(rune('a'+i)),
+			ScheduleID:  "sched-find-runs",
+			ExecutionID: "", // Empty execution ID for test
+			StartedAt:   now.Add(time.Duration(i) * time.Hour),
+			Status:      "completed",
+		}
+		_ = repo.CreateRun(ctx, run)
+	}
+
+	runs, err := repo.FindRunsByScheduleID(ctx, "sched-find-runs", 10)
+	if err != nil {
+		t.Fatalf("FindRunsByScheduleID failed: %v", err)
+	}
+	if len(runs) != 3 {
+		t.Errorf("Expected 3 runs, got %d", len(runs))
+	}
+}
+
+func TestScheduleRepository_FindRunsByScheduleID_WithLimit(t *testing.T) {
+	db := setupTestDB(t)
+	defer db.Close()
+	repo := NewScheduleRepository(db)
+	ctx := context.Background()
+
+	// Create foreign key dependencies
+	createTestScenario(t, db, "s1")
+	createTestUser(t, db, testUserID)
+
+	now := time.Now()
+	schedule := &entity.Schedule{
+		ID: "sched-limit-runs", Name: "Limit Runs", ScenarioID: "s1",
+		Frequency: entity.FrequencyDaily, Status: entity.ScheduleStatusActive,
+		CreatedBy: testUserID, CreatedAt: now, UpdatedAt: now,
+	}
+	_ = repo.Create(ctx, schedule)
+
+	for i := 0; i < 5; i++ {
+		run := &entity.ScheduleRun{
+			ID:          "run-limit-" + string(rune('a'+i)),
+			ScheduleID:  "sched-limit-runs",
+			ExecutionID: "", // Empty execution ID for test
+			StartedAt:   now.Add(time.Duration(i) * time.Hour),
+			Status:      "completed",
+		}
+		_ = repo.CreateRun(ctx, run)
+	}
+
+	runs, err := repo.FindRunsByScheduleID(ctx, "sched-limit-runs", 2)
+	if err != nil {
+		t.Fatalf("FindRunsByScheduleID failed: %v", err)
+	}
+	if len(runs) != 2 {
+		t.Errorf("Expected 2 runs (limited), got %d", len(runs))
+	}
+}
+
+func TestScheduleRepository_Delete_WithRuns(t *testing.T) {
+	db := setupTestDB(t)
+	defer db.Close()
+	repo := NewScheduleRepository(db)
+	ctx := context.Background()
+
+	now := time.Now()
+	schedule := &entity.Schedule{
+		ID: "sched-delete-runs", Name: "Delete Runs", ScenarioID: "s1",
+		Frequency: entity.FrequencyDaily, Status: entity.ScheduleStatusActive,
+		CreatedBy: "user-1", CreatedAt: now, UpdatedAt: now,
+	}
+	_ = repo.Create(ctx, schedule)
+
+	// Add some runs
+	for i := 0; i < 2; i++ {
+		run := &entity.ScheduleRun{
+			ID:          "run-delete-" + string(rune('a'+i)),
+			ScheduleID:  "sched-delete-runs",
+			ExecutionID: "exec-" + string(rune('a'+i)),
+			StartedAt:   now,
+			Status:      "completed",
+		}
+		_ = repo.CreateRun(ctx, run)
+	}
+
+	// Delete should cascade to runs
+	err := repo.Delete(ctx, "sched-delete-runs")
+	if err != nil {
+		t.Fatalf("Delete failed: %v", err)
+	}
+
+	runs, _ := repo.FindRunsByScheduleID(ctx, "sched-delete-runs", 10)
+	if len(runs) != 0 {
+		t.Errorf("Expected 0 runs after delete, got %d", len(runs))
+	}
+}
+
+// Notification Repository tests
+func TestNewNotificationRepository(t *testing.T) {
+	db := setupTestDB(t)
+	defer db.Close()
+
+	repo := NewNotificationRepository(db)
+	if repo == nil {
+		t.Error("Expected non-nil repository")
+	}
+}
+
+func TestNotificationRepository_CreateSettings(t *testing.T) {
+	db := setupTestDB(t)
+	defer db.Close()
+	repo := NewNotificationRepository(db)
+	ctx := context.Background()
+
+	createTestUser(t, db, "user-1")
+	now := time.Now()
+	settings := &entity.NotificationSettings{
+		ID:                   "settings-1",
+		UserID:               "user-1",
+		Channel:              entity.ChannelEmail,
+		Enabled:              true,
+		EmailAddress:         "test@example.com",
+		NotifyOnStart:        true,
+		NotifyOnComplete:     true,
+		NotifyOnFailure:      true,
+		NotifyOnScoreAlert:   true,
+		ScoreAlertThreshold:  70.0,
+		NotifyOnAgentOffline: true,
+		CreatedAt:            now,
+		UpdatedAt:            now,
+	}
+
+	err := repo.CreateSettings(ctx, settings)
+	if err != nil {
+		t.Fatalf("CreateSettings failed: %v", err)
+	}
+}
+
+func TestNotificationRepository_UpdateSettings(t *testing.T) {
+	db := setupTestDB(t)
+	defer db.Close()
+	repo := NewNotificationRepository(db)
+	ctx := context.Background()
+
+	createTestUser(t, db, "user-1")
+	now := time.Now()
+	settings := &entity.NotificationSettings{
+		ID:           "settings-update",
+		UserID:       "user-1",
+		Channel:      entity.ChannelEmail,
+		Enabled:      true,
+		EmailAddress: "old@example.com",
+		CreatedAt:    now,
+		UpdatedAt:    now,
+	}
+	_ = repo.CreateSettings(ctx, settings)
+
+	settings.EmailAddress = "new@example.com"
+	settings.Enabled = false
+	settings.UpdatedAt = time.Now()
+
+	err := repo.UpdateSettings(ctx, settings)
+	if err != nil {
+		t.Fatalf("UpdateSettings failed: %v", err)
+	}
+}
+
+func TestNotificationRepository_FindSettingsByUserID(t *testing.T) {
+	db := setupTestDB(t)
+	defer db.Close()
+	repo := NewNotificationRepository(db)
+	ctx := context.Background()
+
+	createTestUser(t, db, "user-find")
+	now := time.Now()
+	settings := &entity.NotificationSettings{
+		ID:           "settings-find",
+		UserID:       "user-find",
+		Channel:      entity.ChannelEmail,
+		Enabled:      true,
+		EmailAddress: "find@example.com",
+		CreatedAt:    now,
+		UpdatedAt:    now,
+	}
+	_ = repo.CreateSettings(ctx, settings)
+
+	found, err := repo.FindSettingsByUserID(ctx, "user-find")
+	if err != nil {
+		t.Fatalf("FindSettingsByUserID failed: %v", err)
+	}
+	if found.EmailAddress != "find@example.com" {
+		t.Errorf("Expected email 'find@example.com', got '%s'", found.EmailAddress)
+	}
+}
+
+func TestNotificationRepository_FindAllEnabledSettings(t *testing.T) {
+	db := setupTestDB(t)
+	defer db.Close()
+	repo := NewNotificationRepository(db)
+	ctx := context.Background()
+
+	createTestUser(t, db, "user-1")
+	createTestUser(t, db, "user-2")
+	now := time.Now()
+	enabled := &entity.NotificationSettings{
+		ID: "settings-enabled", UserID: "user-1", Channel: entity.ChannelEmail,
+		Enabled: true, EmailAddress: "enabled@example.com",
+		CreatedAt: now, UpdatedAt: now,
+	}
+	disabled := &entity.NotificationSettings{
+		ID: "settings-disabled", UserID: "user-2", Channel: entity.ChannelEmail,
+		Enabled: false, EmailAddress: "disabled@example.com",
+		CreatedAt: now, UpdatedAt: now,
+	}
+	_ = repo.CreateSettings(ctx, enabled)
+	_ = repo.CreateSettings(ctx, disabled)
+
+	settings, err := repo.FindAllEnabledSettings(ctx)
+	if err != nil {
+		t.Fatalf("FindAllEnabledSettings failed: %v", err)
+	}
+	if len(settings) != 1 {
+		t.Errorf("Expected 1 enabled setting, got %d", len(settings))
+	}
+}
+
+func TestNotificationRepository_DeleteSettings(t *testing.T) {
+	db := setupTestDB(t)
+	defer db.Close()
+	repo := NewNotificationRepository(db)
+	ctx := context.Background()
+
+	createTestUser(t, db, "user-1")
+	now := time.Now()
+	settings := &entity.NotificationSettings{
+		ID: "settings-delete", UserID: "user-1", Channel: entity.ChannelEmail,
+		Enabled: true, CreatedAt: now, UpdatedAt: now,
+	}
+	_ = repo.CreateSettings(ctx, settings)
+
+	err := repo.DeleteSettings(ctx, "settings-delete")
+	if err != nil {
+		t.Fatalf("DeleteSettings failed: %v", err)
+	}
+}
+
+func TestNotificationRepository_CreateNotification(t *testing.T) {
+	db := setupTestDB(t)
+	defer db.Close()
+	repo := NewNotificationRepository(db)
+	ctx := context.Background()
+
+	createTestUser(t, db, "user-1")
+	notification := &entity.Notification{
+		ID:        "notif-1",
+		UserID:    "user-1",
+		Type:      entity.NotificationExecutionStarted,
+		Title:     "Test Notification",
+		Message:   "This is a test notification",
+		Data:      map[string]any{"key": "value"},
+		Read:      false,
+		CreatedAt: time.Now(),
+	}
+
+	err := repo.CreateNotification(ctx, notification)
+	if err != nil {
+		t.Fatalf("CreateNotification failed: %v", err)
+	}
+}
+
+func TestNotificationRepository_FindNotificationByID(t *testing.T) {
+	db := setupTestDB(t)
+	defer db.Close()
+	repo := NewNotificationRepository(db)
+	ctx := context.Background()
+
+	createTestUser(t, db, "user-1")
+	notification := &entity.Notification{
+		ID:        "notif-find",
+		UserID:    "user-1",
+		Type:      entity.NotificationExecutionCompleted,
+		Title:     "Find Test",
+		Message:   "Test message",
+		Data:      map[string]any{"score": 85.5},
+		CreatedAt: time.Now(),
+	}
+	_ = repo.CreateNotification(ctx, notification)
+
+	found, err := repo.FindNotificationByID(ctx, "notif-find")
+	if err != nil {
+		t.Fatalf("FindNotificationByID failed: %v", err)
+	}
+	if found.Title != "Find Test" {
+		t.Errorf("Expected title 'Find Test', got '%s'", found.Title)
+	}
+	if found.Type != entity.NotificationExecutionCompleted {
+		t.Errorf("Expected type 'execution_completed', got '%s'", found.Type)
+	}
+}
+
+func TestNotificationRepository_FindNotificationsByUserID(t *testing.T) {
+	db := setupTestDB(t)
+	defer db.Close()
+	repo := NewNotificationRepository(db)
+	ctx := context.Background()
+
+	createTestUser(t, db, "target-user")
+	createTestUser(t, db, "other-user")
+	for i := 0; i < 3; i++ {
+		notification := &entity.Notification{
+			ID:        "notif-user-" + string(rune('a'+i)),
+			UserID:    "target-user",
+			Type:      entity.NotificationExecutionStarted,
+			Title:     "Notification " + string(rune('a'+i)),
+			Message:   "Message",
+			CreatedAt: time.Now().Add(time.Duration(i) * time.Hour),
+		}
+		_ = repo.CreateNotification(ctx, notification)
+	}
+	// Add notification for different user
+	other := &entity.Notification{
+		ID: "notif-other", UserID: "other-user",
+		Type: entity.NotificationExecutionStarted, Title: "Other",
+		Message: "Other", CreatedAt: time.Now(),
+	}
+	_ = repo.CreateNotification(ctx, other)
+
+	notifications, err := repo.FindNotificationsByUserID(ctx, "target-user", 10)
+	if err != nil {
+		t.Fatalf("FindNotificationsByUserID failed: %v", err)
+	}
+	if len(notifications) != 3 {
+		t.Errorf("Expected 3 notifications, got %d", len(notifications))
+	}
+}
+
+func TestNotificationRepository_FindUnreadByUserID(t *testing.T) {
+	db := setupTestDB(t)
+	defer db.Close()
+	repo := NewNotificationRepository(db)
+	ctx := context.Background()
+
+	createTestUser(t, db, "user-unread")
+	unread := &entity.Notification{
+		ID: "notif-unread", UserID: "user-unread",
+		Type: entity.NotificationExecutionStarted, Title: "Unread",
+		Message: "Unread", Read: false, CreatedAt: time.Now(),
+	}
+	read := &entity.Notification{
+		ID: "notif-read", UserID: "user-unread",
+		Type: entity.NotificationExecutionCompleted, Title: "Read",
+		Message: "Read", Read: true, CreatedAt: time.Now(),
+	}
+	_ = repo.CreateNotification(ctx, unread)
+	_ = repo.CreateNotification(ctx, read)
+
+	notifications, err := repo.FindUnreadByUserID(ctx, "user-unread")
+	if err != nil {
+		t.Fatalf("FindUnreadByUserID failed: %v", err)
+	}
+	if len(notifications) != 1 {
+		t.Errorf("Expected 1 unread notification, got %d", len(notifications))
+	}
+}
+
+func TestNotificationRepository_MarkAsRead(t *testing.T) {
+	db := setupTestDB(t)
+	defer db.Close()
+	repo := NewNotificationRepository(db)
+	ctx := context.Background()
+
+	createTestUser(t, db, "user-1")
+	notification := &entity.Notification{
+		ID: "notif-mark-read", UserID: "user-1",
+		Type: entity.NotificationExecutionStarted, Title: "Mark Read",
+		Message: "Test", Read: false, CreatedAt: time.Now(),
+	}
+	_ = repo.CreateNotification(ctx, notification)
+
+	err := repo.MarkAsRead(ctx, "notif-mark-read")
+	if err != nil {
+		t.Fatalf("MarkAsRead failed: %v", err)
+	}
+
+	found, _ := repo.FindNotificationByID(ctx, "notif-mark-read")
+	if !found.Read {
+		t.Error("Expected notification to be marked as read")
+	}
+}
+
+func TestNotificationRepository_MarkAllAsRead(t *testing.T) {
+	db := setupTestDB(t)
+	defer db.Close()
+	repo := NewNotificationRepository(db)
+	ctx := context.Background()
+
+	createTestUser(t, db, "user-all-read")
+	for i := 0; i < 3; i++ {
+		notification := &entity.Notification{
+			ID: "notif-all-read-" + string(rune('a'+i)), UserID: "user-all-read",
+			Type: entity.NotificationExecutionStarted, Title: "Test",
+			Message: "Test", Read: false, CreatedAt: time.Now(),
+		}
+		_ = repo.CreateNotification(ctx, notification)
+	}
+
+	err := repo.MarkAllAsRead(ctx, "user-all-read")
+	if err != nil {
+		t.Fatalf("MarkAllAsRead failed: %v", err)
+	}
+
+	unread, _ := repo.FindUnreadByUserID(ctx, "user-all-read")
+	if len(unread) != 0 {
+		t.Errorf("Expected 0 unread notifications, got %d", len(unread))
+	}
+}
+
+func TestNotificationRepository_WithWebhookURL(t *testing.T) {
+	db := setupTestDB(t)
+	defer db.Close()
+	repo := NewNotificationRepository(db)
+	ctx := context.Background()
+
+	createTestUser(t, db, "user-webhook")
+	now := time.Now()
+	settings := &entity.NotificationSettings{
+		ID:         "settings-webhook",
+		UserID:     "user-webhook",
+		Channel:    entity.ChannelWebhook,
+		Enabled:    true,
+		WebhookURL: "https://example.com/webhook",
+		CreatedAt:  now,
+		UpdatedAt:  now,
+	}
+	_ = repo.CreateSettings(ctx, settings)
+
+	found, err := repo.FindSettingsByUserID(ctx, "user-webhook")
+	if err != nil {
+		t.Fatalf("FindSettingsByUserID failed: %v", err)
+	}
+	if found.WebhookURL != "https://example.com/webhook" {
+		t.Errorf("Expected webhook URL 'https://example.com/webhook', got '%s'", found.WebhookURL)
+	}
+}
+
+func TestNotificationRepository_WithSentAt(t *testing.T) {
+	db := setupTestDB(t)
+	defer db.Close()
+	repo := NewNotificationRepository(db)
+	ctx := context.Background()
+
+	createTestUser(t, db, "user-1")
+	sentAt := time.Now()
+	notification := &entity.Notification{
+		ID: "notif-sent", UserID: "user-1",
+		Type: entity.NotificationExecutionCompleted, Title: "Sent",
+		Message: "Test", SentAt: &sentAt, CreatedAt: time.Now(),
+	}
+	_ = repo.CreateNotification(ctx, notification)
+
+	found, err := repo.FindNotificationByID(ctx, "notif-sent")
+	if err != nil {
+		t.Fatalf("FindNotificationByID failed: %v", err)
+	}
+	if found.SentAt == nil {
+		t.Error("Expected SentAt to be set")
+	}
+}
+
+// Result Repository additional tests for coverage
+func TestResultRepository_FindExecutionsByDateRange(t *testing.T) {
+	db := setupTestDB(t)
+	defer db.Close()
+	repo := NewResultRepository(db)
+	ctx := context.Background()
+
+	createTestScenario(t, db, "scenario-1")
+	now := time.Now()
+	start := now.Add(-24 * time.Hour)
+	end := now.Add(24 * time.Hour)
+
+	// Create executions within range
+	for i := 0; i < 3; i++ {
+		exec := &entity.Execution{
+			ID:         "exec-range-" + string(rune('a'+i)),
+			ScenarioID: "scenario-1",
+			Status:     entity.ExecutionCompleted,
+			StartedAt:  now,
+			SafeMode:   true,
+		}
+		_ = repo.CreateExecution(ctx, exec)
+	}
+
+	// Create execution outside range
+	oldExec := &entity.Execution{
+		ID:         "exec-old",
+		ScenarioID: "scenario-1",
+		Status:     entity.ExecutionCompleted,
+		StartedAt:  now.Add(-48 * time.Hour),
+		SafeMode:   true,
+	}
+	_ = repo.CreateExecution(ctx, oldExec)
+
+	executions, err := repo.FindExecutionsByDateRange(ctx, start, end)
+	if err != nil {
+		t.Fatalf("FindExecutionsByDateRange failed: %v", err)
+	}
+	if len(executions) != 3 {
+		t.Errorf("Expected 3 executions in range, got %d", len(executions))
+	}
+}
+
+func TestResultRepository_FindCompletedExecutionsByDateRange(t *testing.T) {
+	db := setupTestDB(t)
+	defer db.Close()
+	repo := NewResultRepository(db)
+	ctx := context.Background()
+
+	createTestScenario(t, db, "scenario-1")
+	now := time.Now()
+	start := now.Add(-24 * time.Hour)
+	end := now.Add(24 * time.Hour)
+
+	// Create completed execution
+	completed := &entity.Execution{
+		ID:         "exec-completed",
+		ScenarioID: "scenario-1",
+		Status:     entity.ExecutionCompleted,
+		StartedAt:  now,
+	}
+	_ = repo.CreateExecution(ctx, completed)
+
+	// Create running execution
+	running := &entity.Execution{
+		ID:         "exec-running",
+		ScenarioID: "scenario-1",
+		Status:     entity.ExecutionRunning,
+		StartedAt:  now,
+	}
+	_ = repo.CreateExecution(ctx, running)
+
+	executions, err := repo.FindCompletedExecutionsByDateRange(ctx, start, end)
+	if err != nil {
+		t.Fatalf("FindCompletedExecutionsByDateRange failed: %v", err)
+	}
+	if len(executions) != 1 {
+		t.Errorf("Expected 1 completed execution, got %d", len(executions))
+	}
+}
+
+func TestResultRepository_UpdateExecution_NilScore(t *testing.T) {
+	db := setupTestDB(t)
+	defer db.Close()
+	repo := NewResultRepository(db)
+	ctx := context.Background()
+
+	createTestScenario(t, db, "scenario-1")
+	exec := &entity.Execution{
+		ID:         "exec-nil-score",
+		ScenarioID: "scenario-1",
+		Status:     entity.ExecutionRunning,
+		StartedAt:  time.Now(),
+	}
+	_ = repo.CreateExecution(ctx, exec)
+
+	// Update without setting Score (nil)
+	exec.Status = entity.ExecutionCompleted
+	now := time.Now()
+	exec.CompletedAt = &now
+
+	err := repo.UpdateExecution(ctx, exec)
+	if err != nil {
+		t.Fatalf("UpdateExecution with nil score failed: %v", err)
 	}
 }

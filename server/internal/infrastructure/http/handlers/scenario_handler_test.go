@@ -140,6 +140,14 @@ func createTestScenarioService(scenarioRepo *testScenarioRepo, techRepo *testTec
 	return application.NewScenarioService(scenarioRepo, techRepo, validator)
 }
 
+// withAuth wraps a handler with authentication context for testing
+func withAuth(handler gin.HandlerFunc) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		c.Set("user_id", "test-user-id")
+		handler(c)
+	}
+}
+
 func TestNewScenarioHandler(t *testing.T) {
 	scenarioRepo := newTestScenarioRepo()
 	techRepo := newTestTechniqueRepo()
@@ -183,7 +191,7 @@ func TestScenarioHandler_ListScenarios(t *testing.T) {
 	handler := NewScenarioHandler(svc)
 
 	router := gin.New()
-	router.GET("/scenarios", handler.ListScenarios)
+	router.GET("/scenarios", withAuth(handler.ListScenarios))
 
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("GET", "/scenarios", nil)
@@ -202,7 +210,7 @@ func TestScenarioHandler_ListScenarios_Error(t *testing.T) {
 	handler := NewScenarioHandler(svc)
 
 	router := gin.New()
-	router.GET("/scenarios", handler.ListScenarios)
+	router.GET("/scenarios", withAuth(handler.ListScenarios))
 
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("GET", "/scenarios", nil)
@@ -227,7 +235,7 @@ func TestScenarioHandler_GetScenario(t *testing.T) {
 	handler := NewScenarioHandler(svc)
 
 	router := gin.New()
-	router.GET("/scenarios/:id", handler.GetScenario)
+	router.GET("/scenarios/:id", withAuth(handler.GetScenario))
 
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("GET", "/scenarios/s1", nil)
@@ -253,7 +261,7 @@ func TestScenarioHandler_GetScenario_NotFound(t *testing.T) {
 	handler := NewScenarioHandler(svc)
 
 	router := gin.New()
-	router.GET("/scenarios/:id", handler.GetScenario)
+	router.GET("/scenarios/:id", withAuth(handler.GetScenario))
 
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("GET", "/scenarios/nonexistent", nil)
@@ -287,7 +295,7 @@ func TestScenarioHandler_GetScenariosByTag(t *testing.T) {
 	handler := NewScenarioHandler(svc)
 
 	router := gin.New()
-	router.GET("/scenarios/tag/:tag", handler.GetScenariosByTag)
+	router.GET("/scenarios/tag/:tag", withAuth(handler.GetScenariosByTag))
 
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("GET", "/scenarios/tag/apt29", nil)
@@ -319,7 +327,7 @@ func TestScenarioHandler_CreateScenario(t *testing.T) {
 	handler := NewScenarioHandler(svc)
 
 	router := gin.New()
-	router.POST("/scenarios", handler.CreateScenario)
+	router.POST("/scenarios", withAuth(handler.CreateScenario))
 
 	body := CreateScenarioRequest{
 		Name:        "New Scenario",
@@ -348,7 +356,7 @@ func TestScenarioHandler_CreateScenario_BadRequest(t *testing.T) {
 	handler := NewScenarioHandler(svc)
 
 	router := gin.New()
-	router.POST("/scenarios", handler.CreateScenario)
+	router.POST("/scenarios", withAuth(handler.CreateScenario))
 
 	// Missing required fields
 	body := `{"description": "missing name and phases"}`
@@ -384,7 +392,7 @@ func TestScenarioHandler_UpdateScenario(t *testing.T) {
 	handler := NewScenarioHandler(svc)
 
 	router := gin.New()
-	router.PUT("/scenarios/:id", handler.UpdateScenario)
+	router.PUT("/scenarios/:id", withAuth(handler.UpdateScenario))
 
 	body := UpdateScenarioRequest{
 		Name:        "Updated Name",
@@ -427,7 +435,7 @@ func TestScenarioHandler_UpdateScenario_PreservesAuthor(t *testing.T) {
 	handler := NewScenarioHandler(svc)
 
 	router := gin.New()
-	router.PUT("/scenarios/:id", handler.UpdateScenario)
+	router.PUT("/scenarios/:id", withAuth(handler.UpdateScenario))
 
 	body := UpdateScenarioRequest{
 		Name:        "Updated Name",
@@ -464,7 +472,7 @@ func TestScenarioHandler_UpdateScenario_NotFound(t *testing.T) {
 	handler := NewScenarioHandler(svc)
 
 	router := gin.New()
-	router.PUT("/scenarios/:id", handler.UpdateScenario)
+	router.PUT("/scenarios/:id", withAuth(handler.UpdateScenario))
 
 	body := UpdateScenarioRequest{
 		Name: "Updated Name",
@@ -495,7 +503,7 @@ func TestScenarioHandler_DeleteScenario(t *testing.T) {
 	handler := NewScenarioHandler(svc)
 
 	router := gin.New()
-	router.DELETE("/scenarios/:id", handler.DeleteScenario)
+	router.DELETE("/scenarios/:id", withAuth(handler.DeleteScenario))
 
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("DELETE", "/scenarios/s1", nil)
@@ -514,7 +522,7 @@ func TestScenarioHandler_DeleteScenario_Error(t *testing.T) {
 	handler := NewScenarioHandler(svc)
 
 	router := gin.New()
-	router.DELETE("/scenarios/:id", handler.DeleteScenario)
+	router.DELETE("/scenarios/:id", withAuth(handler.DeleteScenario))
 
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("DELETE", "/scenarios/s1", nil)
@@ -533,7 +541,7 @@ func TestScenarioHandler_GetScenariosByTag_Error(t *testing.T) {
 	handler := NewScenarioHandler(svc)
 
 	router := gin.New()
-	router.GET("/scenarios/tag/:tag", handler.GetScenariosByTag)
+	router.GET("/scenarios/tag/:tag", withAuth(handler.GetScenariosByTag))
 
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("GET", "/scenarios/tag/apt29", nil)
@@ -552,7 +560,7 @@ func TestScenarioHandler_CreateScenario_ValidationError(t *testing.T) {
 	handler := NewScenarioHandler(svc)
 
 	router := gin.New()
-	router.POST("/scenarios", handler.CreateScenario)
+	router.POST("/scenarios", withAuth(handler.CreateScenario))
 
 	body := CreateScenarioRequest{
 		Name:        "Test Scenario",
@@ -588,7 +596,7 @@ func TestScenarioHandler_CreateScenario_ServiceError(t *testing.T) {
 	handler := NewScenarioHandler(svc)
 
 	router := gin.New()
-	router.POST("/scenarios", handler.CreateScenario)
+	router.POST("/scenarios", withAuth(handler.CreateScenario))
 
 	body := CreateScenarioRequest{
 		Name:        "Test Scenario",
@@ -625,7 +633,7 @@ func TestScenarioHandler_UpdateScenario_BadRequest(t *testing.T) {
 	handler := NewScenarioHandler(svc)
 
 	router := gin.New()
-	router.PUT("/scenarios/:id", handler.UpdateScenario)
+	router.PUT("/scenarios/:id", withAuth(handler.UpdateScenario))
 
 	// Missing required fields
 	body := `{"description": "missing name and phases"}`
@@ -656,7 +664,7 @@ func TestScenarioHandler_UpdateScenario_ValidationError(t *testing.T) {
 	handler := NewScenarioHandler(svc)
 
 	router := gin.New()
-	router.PUT("/scenarios/:id", handler.UpdateScenario)
+	router.PUT("/scenarios/:id", withAuth(handler.UpdateScenario))
 
 	body := UpdateScenarioRequest{
 		Name: "Updated Name",
@@ -732,7 +740,7 @@ func TestScenarioHandler_UpdateScenario_ServiceError(t *testing.T) {
 	handler := NewScenarioHandler(svc)
 
 	router := gin.New()
-	router.PUT("/scenarios/:id", handler.UpdateScenario)
+	router.PUT("/scenarios/:id", withAuth(handler.UpdateScenario))
 
 	body := UpdateScenarioRequest{
 		Name:        "Updated Name",
@@ -761,7 +769,7 @@ func TestScenarioHandler_ListScenarios_NilScenarios(t *testing.T) {
 	handler := NewScenarioHandler(svc)
 
 	router := gin.New()
-	router.GET("/scenarios", handler.ListScenarios)
+	router.GET("/scenarios", withAuth(handler.ListScenarios))
 
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("GET", "/scenarios", nil)
@@ -785,7 +793,7 @@ func TestScenarioHandler_GetScenariosByTag_NilScenarios(t *testing.T) {
 	handler := NewScenarioHandler(svc)
 
 	router := gin.New()
-	router.GET("/scenarios/tag/:tag", handler.GetScenariosByTag)
+	router.GET("/scenarios/tag/:tag", withAuth(handler.GetScenariosByTag))
 
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("GET", "/scenarios/tag/nonexistent", nil)
@@ -828,5 +836,406 @@ func TestUpdateScenarioRequest_Struct(t *testing.T) {
 
 	if req.Name != "Updated" {
 		t.Errorf("Name = %s, want Updated", req.Name)
+	}
+}
+
+func TestScenarioHandler_ExportScenarios(t *testing.T) {
+	scenarioRepo := newTestScenarioRepo()
+	scenarioRepo.scenarios["s1"] = &entity.Scenario{
+		ID:   "s1",
+		Name: "Test Scenario 1",
+		Phases: []entity.Phase{
+			{Name: "Phase 1", Techniques: []string{"T1082"}, Order: 1},
+		},
+	}
+	scenarioRepo.scenarios["s2"] = &entity.Scenario{
+		ID:   "s2",
+		Name: "Test Scenario 2",
+		Phases: []entity.Phase{
+			{Name: "Phase 1", Techniques: []string{"T1059"}, Order: 1},
+		},
+	}
+	techRepo := newTestTechniqueRepo()
+	svc := createTestScenarioService(scenarioRepo, techRepo)
+	handler := NewScenarioHandler(svc)
+
+	router := gin.New()
+	router.GET("/scenarios/export", withAuth(handler.ExportScenarios))
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("GET", "/scenarios/export", nil)
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("Expected status 200, got %d", w.Code)
+	}
+
+	// Check Content-Disposition header
+	contentDisp := w.Header().Get("Content-Disposition")
+	if contentDisp == "" {
+		t.Error("Expected Content-Disposition header")
+	}
+
+	var export ScenarioExport
+	if err := json.Unmarshal(w.Body.Bytes(), &export); err != nil {
+		t.Fatalf("Failed to unmarshal response: %v", err)
+	}
+
+	if export.Version != "1.0" {
+		t.Errorf("Expected version 1.0, got %s", export.Version)
+	}
+
+	if len(export.Scenarios) != 2 {
+		t.Errorf("Expected 2 scenarios, got %d", len(export.Scenarios))
+	}
+}
+
+func TestScenarioHandler_ExportScenarios_WithIDs(t *testing.T) {
+	scenarioRepo := newTestScenarioRepo()
+	scenarioRepo.scenarios["s1"] = &entity.Scenario{
+		ID:   "s1",
+		Name: "Test Scenario 1",
+		Phases: []entity.Phase{
+			{Name: "Phase 1", Techniques: []string{"T1082"}, Order: 1},
+		},
+	}
+	scenarioRepo.scenarios["s2"] = &entity.Scenario{
+		ID:   "s2",
+		Name: "Test Scenario 2",
+		Phases: []entity.Phase{
+			{Name: "Phase 1", Techniques: []string{"T1059"}, Order: 1},
+		},
+	}
+	techRepo := newTestTechniqueRepo()
+	svc := createTestScenarioService(scenarioRepo, techRepo)
+	handler := NewScenarioHandler(svc)
+
+	router := gin.New()
+	router.GET("/scenarios/export", withAuth(handler.ExportScenarios))
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("GET", "/scenarios/export?ids=s1", nil)
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("Expected status 200, got %d", w.Code)
+	}
+
+	var export ScenarioExport
+	_ = json.Unmarshal(w.Body.Bytes(), &export)
+
+	if len(export.Scenarios) != 1 {
+		t.Errorf("Expected 1 scenario, got %d", len(export.Scenarios))
+	}
+}
+
+func TestScenarioHandler_ExportScenarios_NotFound(t *testing.T) {
+	scenarioRepo := newTestScenarioRepo()
+	techRepo := newTestTechniqueRepo()
+	svc := createTestScenarioService(scenarioRepo, techRepo)
+	handler := NewScenarioHandler(svc)
+
+	router := gin.New()
+	router.GET("/scenarios/export", withAuth(handler.ExportScenarios))
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("GET", "/scenarios/export?ids=nonexistent", nil)
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Errorf("Expected status 404, got %d", w.Code)
+	}
+}
+
+func TestScenarioHandler_ExportScenario(t *testing.T) {
+	scenarioRepo := newTestScenarioRepo()
+	scenarioRepo.scenarios["s1"] = &entity.Scenario{
+		ID:   "s1",
+		Name: "Test Scenario",
+		Phases: []entity.Phase{
+			{Name: "Phase 1", Techniques: []string{"T1082"}, Order: 1},
+		},
+	}
+	techRepo := newTestTechniqueRepo()
+	svc := createTestScenarioService(scenarioRepo, techRepo)
+	handler := NewScenarioHandler(svc)
+
+	router := gin.New()
+	router.GET("/scenarios/:id/export", withAuth(handler.ExportScenario))
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("GET", "/scenarios/s1/export", nil)
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("Expected status 200, got %d", w.Code)
+	}
+
+	var export ScenarioExport
+	_ = json.Unmarshal(w.Body.Bytes(), &export)
+
+	if len(export.Scenarios) != 1 {
+		t.Errorf("Expected 1 scenario, got %d", len(export.Scenarios))
+	}
+
+	if export.Scenarios[0].ID != "s1" {
+		t.Errorf("Expected scenario ID s1, got %s", export.Scenarios[0].ID)
+	}
+}
+
+func TestScenarioHandler_ExportScenario_NotFound(t *testing.T) {
+	scenarioRepo := newTestScenarioRepo()
+	techRepo := newTestTechniqueRepo()
+	svc := createTestScenarioService(scenarioRepo, techRepo)
+	handler := NewScenarioHandler(svc)
+
+	router := gin.New()
+	router.GET("/scenarios/:id/export", withAuth(handler.ExportScenario))
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("GET", "/scenarios/nonexistent/export", nil)
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Errorf("Expected status 404, got %d", w.Code)
+	}
+}
+
+func TestScenarioHandler_ImportScenarios(t *testing.T) {
+	scenarioRepo := newTestScenarioRepo()
+	techRepo := newTestTechniqueRepo()
+	techRepo.techniques["T1082"] = &entity.Technique{
+		ID:        "T1082",
+		Name:      "System Information Discovery",
+		Tactic:    entity.TacticDiscovery,
+		Platforms: []string{"windows", "linux"},
+	}
+	svc := createTestScenarioService(scenarioRepo, techRepo)
+	handler := NewScenarioHandler(svc)
+
+	router := gin.New()
+	router.POST("/scenarios/import", withAuth(handler.ImportScenarios))
+
+	body := ImportScenariosRequest{
+		Version: "1.0",
+		Scenarios: []ImportScenarioRequest{
+			{
+				Name:        "Imported Scenario",
+				Description: "A test scenario",
+				Phases: []entity.Phase{
+					{Name: "Discovery", Techniques: []string{"T1082"}, Order: 1},
+				},
+				Tags: []string{"imported"},
+			},
+		},
+	}
+	jsonBody, _ := json.Marshal(body)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("POST", "/scenarios/import", bytes.NewBuffer(jsonBody))
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusCreated {
+		t.Errorf("Expected status 201, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var response ImportScenariosResponse
+	_ = json.Unmarshal(w.Body.Bytes(), &response)
+
+	if response.Imported != 1 {
+		t.Errorf("Expected 1 imported, got %d", response.Imported)
+	}
+	if response.Failed != 0 {
+		t.Errorf("Expected 0 failed, got %d", response.Failed)
+	}
+}
+
+func TestScenarioHandler_ImportScenarios_BadRequest(t *testing.T) {
+	scenarioRepo := newTestScenarioRepo()
+	techRepo := newTestTechniqueRepo()
+	svc := createTestScenarioService(scenarioRepo, techRepo)
+	handler := NewScenarioHandler(svc)
+
+	router := gin.New()
+	router.POST("/scenarios/import", withAuth(handler.ImportScenarios))
+
+	// Invalid JSON
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("POST", "/scenarios/import", bytes.NewBufferString("invalid json"))
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("Expected status 400, got %d", w.Code)
+	}
+}
+
+func TestScenarioHandler_ImportScenarios_Empty(t *testing.T) {
+	scenarioRepo := newTestScenarioRepo()
+	techRepo := newTestTechniqueRepo()
+	svc := createTestScenarioService(scenarioRepo, techRepo)
+	handler := NewScenarioHandler(svc)
+
+	router := gin.New()
+	router.POST("/scenarios/import", withAuth(handler.ImportScenarios))
+
+	body := ImportScenariosRequest{
+		Version:   "1.0",
+		Scenarios: []ImportScenarioRequest{},
+	}
+	jsonBody, _ := json.Marshal(body)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("POST", "/scenarios/import", bytes.NewBuffer(jsonBody))
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("Expected status 400, got %d", w.Code)
+	}
+}
+
+func TestScenarioHandler_ImportScenarios_PartialFailure(t *testing.T) {
+	scenarioRepo := newTestScenarioRepo()
+	techRepo := newTestTechniqueRepo()
+	techRepo.techniques["T1082"] = &entity.Technique{
+		ID:        "T1082",
+		Name:      "System Information Discovery",
+		Tactic:    entity.TacticDiscovery,
+		Platforms: []string{"windows", "linux"},
+	}
+	svc := createTestScenarioService(scenarioRepo, techRepo)
+	handler := NewScenarioHandler(svc)
+
+	router := gin.New()
+	router.POST("/scenarios/import", withAuth(handler.ImportScenarios))
+
+	body := ImportScenariosRequest{
+		Version: "1.0",
+		Scenarios: []ImportScenarioRequest{
+			{
+				Name: "Valid Scenario",
+				Phases: []entity.Phase{
+					{Name: "Discovery", Techniques: []string{"T1082"}, Order: 1},
+				},
+			},
+			{
+				Name: "Invalid Scenario",
+				Phases: []entity.Phase{
+					{Name: "Discovery", Techniques: []string{"T9999"}, Order: 1}, // Invalid technique
+				},
+			},
+		},
+	}
+	jsonBody, _ := json.Marshal(body)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("POST", "/scenarios/import", bytes.NewBuffer(jsonBody))
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusMultiStatus {
+		t.Errorf("Expected status 207, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var response ImportScenariosResponse
+	_ = json.Unmarshal(w.Body.Bytes(), &response)
+
+	if response.Imported != 1 {
+		t.Errorf("Expected 1 imported, got %d", response.Imported)
+	}
+	if response.Failed != 1 {
+		t.Errorf("Expected 1 failed, got %d", response.Failed)
+	}
+	if len(response.Errors) != 1 {
+		t.Errorf("Expected 1 error, got %d", len(response.Errors))
+	}
+}
+
+func TestScenarioHandler_ImportScenarios_AllFailed(t *testing.T) {
+	scenarioRepo := newTestScenarioRepo()
+	techRepo := newTestTechniqueRepo()
+	// Don't add any techniques - all will fail validation
+	svc := createTestScenarioService(scenarioRepo, techRepo)
+	handler := NewScenarioHandler(svc)
+
+	router := gin.New()
+	router.POST("/scenarios/import", withAuth(handler.ImportScenarios))
+
+	body := ImportScenariosRequest{
+		Version: "1.0",
+		Scenarios: []ImportScenarioRequest{
+			{
+				Name: "Invalid Scenario 1",
+				Phases: []entity.Phase{
+					{Name: "Discovery", Techniques: []string{"T9999"}, Order: 1},
+				},
+			},
+			{
+				Name: "Invalid Scenario 2",
+				Phases: []entity.Phase{
+					{Name: "Discovery", Techniques: []string{"T8888"}, Order: 1},
+				},
+			},
+		},
+	}
+	jsonBody, _ := json.Marshal(body)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("POST", "/scenarios/import", bytes.NewBuffer(jsonBody))
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("Expected status 400, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var response ImportScenariosResponse
+	_ = json.Unmarshal(w.Body.Bytes(), &response)
+
+	if response.Imported != 0 {
+		t.Errorf("Expected 0 imported, got %d", response.Imported)
+	}
+	if response.Failed != 2 {
+		t.Errorf("Expected 2 failed, got %d", response.Failed)
+	}
+}
+
+func TestScenarioExport_Struct(t *testing.T) {
+	export := ScenarioExport{
+		Version:    "1.0",
+		ExportedAt: "2024-01-01T00:00:00Z",
+		Scenarios:  []*entity.Scenario{},
+	}
+
+	if export.Version != "1.0" {
+		t.Errorf("Version = %s, want 1.0", export.Version)
+	}
+}
+
+func TestImportScenariosRequest_Struct(t *testing.T) {
+	req := ImportScenariosRequest{
+		Version: "1.0",
+		Scenarios: []ImportScenarioRequest{
+			{Name: "Test"},
+		},
+	}
+
+	if len(req.Scenarios) != 1 {
+		t.Errorf("Expected 1 scenario, got %d", len(req.Scenarios))
+	}
+}
+
+func TestImportScenariosResponse_Struct(t *testing.T) {
+	resp := ImportScenariosResponse{
+		Imported:  1,
+		Failed:    0,
+		Errors:    []string{},
+		Scenarios: []*entity.Scenario{},
+	}
+
+	if resp.Imported != 1 {
+		t.Errorf("Imported = %d, want 1", resp.Imported)
 	}
 }

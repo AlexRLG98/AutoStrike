@@ -145,7 +145,8 @@ agent: agent-build-quick ## Build and run the agent
 	@echo "$(YELLOW)Starting agent...$(RESET)"
 	@cd agent && ./target/release/autostrike-agent \
 		--server http://localhost:8443 \
-		--paw agent-$$(hostname)-$$$$
+		--paw agent-$$(hostname)-$$$$ \
+		--agent-secret agent-dev-secret
 
 # =============================================================================
 # Docker

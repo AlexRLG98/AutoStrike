@@ -135,7 +135,7 @@ Test that the server responds:
 curl -k https://localhost:8443/health
 
 # Expected response
-{"status": "ok"}
+{"status": "ok", "auth_enabled": false}
 ```
 
 ---

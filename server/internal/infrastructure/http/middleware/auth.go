@@ -4,14 +4,34 @@ import (
 	"net/http"
 	"strings"
 
+	"autostrike/internal/domain/entity"
+
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
+)
+
+// Error messages
+const (
+	errRoleNotFound            = "role not found"
+	errInvalidRoleFormat       = "invalid role format"
+	errInsufficientPermissions = "insufficient permissions"
 )
 
 // AuthConfig contains authentication configuration
 type AuthConfig struct {
 	JWTSecret   string
 	AgentSecret string
+}
+
+// NoAuthMiddleware creates a middleware that sets default user context when auth is disabled
+// This allows handlers that check for user_id to work in development mode
+func NoAuthMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		// Set default anonymous user with admin role for full access
+		c.Set("user_id", "anonymous")
+		c.Set("role", "admin")
+		c.Next()
+	}
 }
 
 // AuthMiddleware creates an authentication middleware
@@ -98,14 +118,14 @@ func RoleMiddleware(requiredRoles ...string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		role, exists := c.Get("role")
 		if !exists {
-			c.JSON(http.StatusForbidden, gin.H{"error": "role not found"})
+			c.JSON(http.StatusForbidden, gin.H{"error": errRoleNotFound})
 			c.Abort()
 			return
 		}
 
 		roleStr, ok := role.(string)
 		if !ok {
-			c.JSON(http.StatusForbidden, gin.H{"error": "invalid role format"})
+			c.JSON(http.StatusForbidden, gin.H{"error": errInvalidRoleFormat})
 			c.Abort()
 			return
 		}
@@ -117,7 +137,78 @@ func RoleMiddleware(requiredRoles ...string) gin.HandlerFunc {
 			}
 		}
 
-		c.JSON(http.StatusForbidden, gin.H{"error": "insufficient permissions"})
+		c.JSON(http.StatusForbidden, gin.H{"error": errInsufficientPermissions})
+		c.Abort()
+	}
+}
+
+// PermissionMiddleware creates a permission-based authorization middleware
+func PermissionMiddleware(requiredPermissions ...entity.Permission) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		role, exists := c.Get("role")
+		if !exists {
+			c.JSON(http.StatusForbidden, gin.H{"error": errRoleNotFound})
+			c.Abort()
+			return
+		}
+
+		roleStr, ok := role.(string)
+		if !ok {
+			c.JSON(http.StatusForbidden, gin.H{"error": errInvalidRoleFormat})
+			c.Abort()
+			return
+		}
+
+		userRole := entity.UserRole(roleStr)
+
+		// Check if user has ALL required permissions
+		for _, perm := range requiredPermissions {
+			if !entity.HasPermission(userRole, perm) {
+				c.JSON(http.StatusForbidden, gin.H{
+					"error":     errInsufficientPermissions,
+					"required":  string(perm),
+					"user_role": roleStr,
+				})
+				c.Abort()
+				return
+			}
+		}
+
+		c.Next()
+	}
+}
+
+// RequireAnyPermission creates a middleware that requires at least one of the given permissions
+func RequireAnyPermission(permissions ...entity.Permission) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		role, exists := c.Get("role")
+		if !exists {
+			c.JSON(http.StatusForbidden, gin.H{"error": errRoleNotFound})
+			c.Abort()
+			return
+		}
+
+		roleStr, ok := role.(string)
+		if !ok {
+			c.JSON(http.StatusForbidden, gin.H{"error": errInvalidRoleFormat})
+			c.Abort()
+			return
+		}
+
+		userRole := entity.UserRole(roleStr)
+
+		// Check if user has ANY of the required permissions
+		for _, perm := range permissions {
+			if entity.HasPermission(userRole, perm) {
+				c.Next()
+				return
+			}
+		}
+
+		c.JSON(http.StatusForbidden, gin.H{
+			"error":     errInsufficientPermissions,
+			"user_role": roleStr,
+		})
 		c.Abort()
 	}
 }

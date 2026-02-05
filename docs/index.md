@@ -90,7 +90,11 @@ See the [Quick Start Guide](guide/quickstart.md) for detailed instructions.
 | **ATT&CK Matrix** | Interactive MITRE matrix visualization |
 | **Scenarios** | Attack scenarios with Run capability |
 | **Executions** | Execution history and results |
+| **Analytics** | Score trends, comparisons, and reports |
+| **Scheduler** | Schedule automated scenario executions |
 | **Settings** | Configuration options |
+| **Admin/Users** | User management (admin only) |
+| **Admin/Permissions** | Role-based permission matrix |
 
 ---
 

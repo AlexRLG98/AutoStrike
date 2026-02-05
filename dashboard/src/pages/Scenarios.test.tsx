@@ -3,7 +3,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import Scenarios from './Scenarios';
-import { api, executionApi } from '../lib/api';
+import { api, executionApi, scenarioApi } from '../lib/api';
 import toast from 'react-hot-toast';
 
 // Mock the API
@@ -13,6 +13,10 @@ vi.mock('../lib/api', () => ({
   },
   executionApi: {
     start: vi.fn(),
+  },
+  scenarioApi: {
+    exportAll: vi.fn(),
+    import: vi.fn(),
   },
 }));
 
@@ -387,5 +391,462 @@ describe('Scenarios Page', () => {
     // The modal isn't rendered, so no mutation can be triggered
     expect(screen.queryByTestId('run-modal')).not.toBeInTheDocument();
     expect(executionApi.start).not.toHaveBeenCalled();
+  });
+});
+
+describe('Scenarios Import/Export', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('renders import and export buttons', async () => {
+    vi.mocked(api.get).mockResolvedValue({ data: [] } as never);
+
+    renderWithClient(<Scenarios />);
+
+    await screen.findByText('Scenarios');
+    expect(screen.getByText('Import')).toBeInTheDocument();
+    expect(screen.getByText('Export')).toBeInTheDocument();
+  });
+
+  it('disables export button when no scenarios', async () => {
+    vi.mocked(api.get).mockResolvedValue({ data: [] } as never);
+
+    renderWithClient(<Scenarios />);
+
+    await screen.findByText('Scenarios');
+    const exportButton = screen.getByText('Export').closest('button');
+    expect(exportButton).toBeDisabled();
+  });
+
+  it('enables export button when scenarios exist', async () => {
+    const mockScenarios = [
+      {
+        id: 'scenario-1',
+        name: 'Export Scenario',
+        description: 'For export test',
+        phases: [],
+        tags: [],
+      },
+    ];
+    vi.mocked(api.get).mockResolvedValue({ data: mockScenarios } as never);
+
+    renderWithClient(<Scenarios />);
+
+    await screen.findByText('Export Scenario');
+    const exportButton = screen.getByText('Export').closest('button');
+    expect(exportButton).not.toBeDisabled();
+  });
+
+  it('opens import modal when Import button clicked', async () => {
+    vi.mocked(api.get).mockResolvedValue({ data: [] } as never);
+
+    renderWithClient(<Scenarios />);
+
+    await screen.findByText('Scenarios');
+    fireEvent.click(screen.getByText('Import'));
+
+    expect(screen.getByText('Import Scenarios')).toBeInTheDocument();
+    expect(screen.getByText(/Upload a JSON file/)).toBeInTheDocument();
+  });
+
+  it('closes import modal when X is clicked', async () => {
+    vi.mocked(api.get).mockResolvedValue({ data: [] } as never);
+
+    renderWithClient(<Scenarios />);
+
+    await screen.findByText('Scenarios');
+    fireEvent.click(screen.getByText('Import'));
+    expect(screen.getByText('Import Scenarios')).toBeInTheDocument();
+
+    // Find the close button in the modal header by looking for button with XMarkIcon
+    const modalHeader = screen.getByText('Import Scenarios').closest('div');
+    const closeButton = modalHeader?.querySelector('button');
+    if (closeButton) {
+      fireEvent.click(closeButton);
+    }
+
+    await waitFor(() => {
+      expect(screen.queryByText('Import Scenarios')).not.toBeInTheDocument();
+    });
+  });
+
+  it('exports scenarios successfully', async () => {
+    const mockScenarios = [
+      {
+        id: 'scenario-1',
+        name: 'Export Test Scenario',
+        description: 'Scenario for export',
+        phases: [],
+        tags: [],
+      },
+    ];
+    vi.mocked(api.get).mockResolvedValue({ data: mockScenarios } as never);
+    vi.mocked(scenarioApi.exportAll).mockResolvedValue({
+      data: { version: '1.0', scenarios: mockScenarios },
+    } as never);
+
+    // Mock DOM methods for download
+    const mockCreateObjectURL = vi.fn(() => 'blob:test');
+    const mockRevokeObjectURL = vi.fn();
+    global.URL.createObjectURL = mockCreateObjectURL;
+    global.URL.revokeObjectURL = mockRevokeObjectURL;
+
+    renderWithClient(<Scenarios />);
+
+    await screen.findByText('Export Test Scenario');
+    fireEvent.click(screen.getByText('Export'));
+
+    await waitFor(() => {
+      expect(scenarioApi.exportAll).toHaveBeenCalled();
+      expect(toast.success).toHaveBeenCalledWith('Scenarios exported successfully');
+    });
+  });
+
+  it('shows error toast when export fails', async () => {
+    const mockScenarios = [
+      {
+        id: 'scenario-1',
+        name: 'Failed Export Scenario',
+        description: 'Export will fail',
+        phases: [],
+        tags: [],
+      },
+    ];
+    vi.mocked(api.get).mockResolvedValue({ data: mockScenarios } as never);
+    vi.mocked(scenarioApi.exportAll).mockRejectedValue(new Error('Export failed') as never);
+
+    renderWithClient(<Scenarios />);
+
+    await screen.findByText('Failed Export Scenario');
+    fireEvent.click(screen.getByText('Export'));
+
+    await waitFor(() => {
+      expect(toast.error).toHaveBeenCalledWith('Failed to export scenarios');
+    });
+  });
+
+  it('imports scenarios from valid JSON file', async () => {
+    vi.mocked(api.get).mockResolvedValue({ data: [] } as never);
+    vi.mocked(scenarioApi.import).mockResolvedValue({
+      data: {
+        imported: 2,
+        failed: 0,
+        scenarios: [],
+      },
+    } as never);
+
+    renderWithClient(<Scenarios />);
+
+    await screen.findByText('Scenarios');
+    fireEvent.click(screen.getByText('Import'));
+
+    const file = new File(
+      [JSON.stringify({ scenarios: [{ name: 'Test', phases: [], tags: [] }] })],
+      'test.json',
+      { type: 'application/json' }
+    );
+
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+    fireEvent.change(input, { target: { files: [file] } });
+
+    await waitFor(() => {
+      expect(scenarioApi.import).toHaveBeenCalled();
+    });
+  });
+
+  it('shows import result with success', async () => {
+    vi.mocked(api.get).mockResolvedValue({ data: [] } as never);
+    vi.mocked(scenarioApi.import).mockResolvedValue({
+      data: {
+        imported: 3,
+        failed: 0,
+        scenarios: [],
+      },
+    } as never);
+
+    renderWithClient(<Scenarios />);
+
+    await screen.findByText('Scenarios');
+    fireEvent.click(screen.getByText('Import'));
+
+    const file = new File(
+      [JSON.stringify({ scenarios: [{ name: 'Test', phases: [] }] })],
+      'test.json',
+      { type: 'application/json' }
+    );
+
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+    fireEvent.change(input, { target: { files: [file] } });
+
+    await waitFor(() => {
+      expect(screen.getByText('Import Successful')).toBeInTheDocument();
+      expect(screen.getByText('3 imported, 0 failed')).toBeInTheDocument();
+    });
+  });
+
+  it('shows import result with partial failure', async () => {
+    vi.mocked(api.get).mockResolvedValue({ data: [] } as never);
+    vi.mocked(scenarioApi.import).mockResolvedValue({
+      data: {
+        imported: 2,
+        failed: 1,
+        errors: ['Scenario "Bad" has invalid format'],
+        scenarios: [],
+      },
+    } as never);
+
+    renderWithClient(<Scenarios />);
+
+    await screen.findByText('Scenarios');
+    fireEvent.click(screen.getByText('Import'));
+
+    const file = new File(
+      [JSON.stringify({ scenarios: [{ name: 'Test', phases: [] }] })],
+      'test.json',
+      { type: 'application/json' }
+    );
+
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+    fireEvent.change(input, { target: { files: [file] } });
+
+    await waitFor(() => {
+      expect(screen.getByText('Partial Import')).toBeInTheDocument();
+      expect(screen.getByText('2 imported, 1 failed')).toBeInTheDocument();
+      expect(screen.getByText('Scenario "Bad" has invalid format')).toBeInTheDocument();
+    });
+  });
+
+  it('shows import result with complete failure', async () => {
+    vi.mocked(api.get).mockResolvedValue({ data: [] } as never);
+    vi.mocked(scenarioApi.import).mockResolvedValue({
+      data: {
+        imported: 0,
+        failed: 2,
+        errors: ['All scenarios failed'],
+        scenarios: [],
+      },
+    } as never);
+
+    renderWithClient(<Scenarios />);
+
+    await screen.findByText('Scenarios');
+    fireEvent.click(screen.getByText('Import'));
+
+    const file = new File(
+      [JSON.stringify({ scenarios: [{ name: 'Test', phases: [] }] })],
+      'test.json',
+      { type: 'application/json' }
+    );
+
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+    fireEvent.change(input, { target: { files: [file] } });
+
+    await waitFor(() => {
+      expect(screen.getByText('Import Failed')).toBeInTheDocument();
+    });
+  });
+
+  it('shows error toast for invalid JSON format', async () => {
+    vi.mocked(api.get).mockResolvedValue({ data: [] } as never);
+
+    renderWithClient(<Scenarios />);
+
+    await screen.findByText('Scenarios');
+    fireEvent.click(screen.getByText('Import'));
+
+    const file = new File(['not valid json'], 'test.json', { type: 'application/json' });
+
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+    fireEvent.change(input, { target: { files: [file] } });
+
+    await waitFor(() => {
+      expect(toast.error).toHaveBeenCalledWith('Failed to parse JSON file');
+    });
+  });
+
+  it('shows error for non-array scenarios', async () => {
+    vi.mocked(api.get).mockResolvedValue({ data: [] } as never);
+
+    renderWithClient(<Scenarios />);
+
+    await screen.findByText('Scenarios');
+    fireEvent.click(screen.getByText('Import'));
+
+    const file = new File(
+      [JSON.stringify({ scenarios: 'not an array' })],
+      'test.json',
+      { type: 'application/json' }
+    );
+
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+    fireEvent.change(input, { target: { files: [file] } });
+
+    await waitFor(() => {
+      expect(toast.error).toHaveBeenCalledWith('Invalid format: expected scenarios array');
+    });
+  });
+
+  it('handles import error with data', async () => {
+    vi.mocked(api.get).mockResolvedValue({ data: [] } as never);
+    vi.mocked(scenarioApi.import).mockRejectedValue({
+      response: {
+        data: {
+          imported: 1,
+          failed: 1,
+          errors: ['Error message'],
+        },
+      },
+    } as never);
+
+    renderWithClient(<Scenarios />);
+
+    await screen.findByText('Scenarios');
+    fireEvent.click(screen.getByText('Import'));
+
+    const file = new File(
+      [JSON.stringify({ scenarios: [{ name: 'Test', phases: [] }] })],
+      'test.json',
+      { type: 'application/json' }
+    );
+
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+    fireEvent.change(input, { target: { files: [file] } });
+
+    await waitFor(() => {
+      expect(screen.getByText('1 imported, 1 failed')).toBeInTheDocument();
+    });
+  });
+
+  it('handles import error without data', async () => {
+    vi.mocked(api.get).mockResolvedValue({ data: [] } as never);
+    vi.mocked(scenarioApi.import).mockRejectedValue({
+      response: {
+        data: {
+          error: 'Server error',
+        },
+      },
+    } as never);
+
+    renderWithClient(<Scenarios />);
+
+    await screen.findByText('Scenarios');
+    fireEvent.click(screen.getByText('Import'));
+
+    const file = new File(
+      [JSON.stringify({ scenarios: [{ name: 'Test', phases: [] }] })],
+      'test.json',
+      { type: 'application/json' }
+    );
+
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+    fireEvent.change(input, { target: { files: [file] } });
+
+    await waitFor(() => {
+      expect(toast.error).toHaveBeenCalledWith('Server error');
+    });
+  });
+
+  it('allows importing more after result', async () => {
+    vi.mocked(api.get).mockResolvedValue({ data: [] } as never);
+    vi.mocked(scenarioApi.import).mockResolvedValue({
+      data: {
+        imported: 1,
+        failed: 0,
+        scenarios: [],
+      },
+    } as never);
+
+    renderWithClient(<Scenarios />);
+
+    await screen.findByText('Scenarios');
+    fireEvent.click(screen.getByText('Import'));
+
+    const file = new File(
+      [JSON.stringify({ scenarios: [{ name: 'Test', phases: [] }] })],
+      'test.json',
+      { type: 'application/json' }
+    );
+
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+    fireEvent.change(input, { target: { files: [file] } });
+
+    await waitFor(() => {
+      expect(screen.getByText('Import Successful')).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByText('Import More'));
+
+    await waitFor(() => {
+      expect(screen.getByText(/Upload a JSON file/)).toBeInTheDocument();
+    });
+  });
+
+  it('closes modal after clicking Done', async () => {
+    vi.mocked(api.get).mockResolvedValue({ data: [] } as never);
+    vi.mocked(scenarioApi.import).mockResolvedValue({
+      data: {
+        imported: 1,
+        failed: 0,
+        scenarios: [],
+      },
+    } as never);
+
+    renderWithClient(<Scenarios />);
+
+    await screen.findByText('Scenarios');
+    fireEvent.click(screen.getByText('Import'));
+
+    const file = new File(
+      [JSON.stringify({ scenarios: [{ name: 'Test', phases: [] }] })],
+      'test.json',
+      { type: 'application/json' }
+    );
+
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+    fireEvent.change(input, { target: { files: [file] } });
+
+    await waitFor(() => {
+      expect(screen.getByText('Import Successful')).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByText('Done'));
+
+    await waitFor(() => {
+      expect(screen.queryByText('Import Scenarios')).not.toBeInTheDocument();
+    });
+  });
+
+  it('handles direct array format import', async () => {
+    vi.mocked(api.get).mockResolvedValue({ data: [] } as never);
+    vi.mocked(scenarioApi.import).mockResolvedValue({
+      data: {
+        imported: 1,
+        failed: 0,
+        scenarios: [],
+      },
+    } as never);
+
+    renderWithClient(<Scenarios />);
+
+    await screen.findByText('Scenarios');
+    fireEvent.click(screen.getByText('Import'));
+
+    // Direct array format (not wrapped in {scenarios: ...})
+    const file = new File(
+      [JSON.stringify([{ name: 'Test', phases: [], tags: [] }])],
+      'test.json',
+      { type: 'application/json' }
+    );
+
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+    fireEvent.change(input, { target: { files: [file] } });
+
+    await waitFor(() => {
+      expect(scenarioApi.import).toHaveBeenCalledWith({
+        version: '1.0',
+        scenarios: [{ name: 'Test', phases: [], tags: [] }],
+      });
+    });
   });
 });

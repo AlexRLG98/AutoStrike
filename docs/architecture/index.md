@@ -43,7 +43,7 @@ AutoStrike uses a 3-tier architecture with three main components.
 
 | Component | Language | Role |
 |-----------|----------|------|
-| [Dashboard](dashboard.md) | React/TypeScript | User interface (8 pages) |
+| [Dashboard](dashboard.md) | React/TypeScript | User interface (11 pages) |
 | [Backend](backend.md) | Go | API, orchestration, storage, WebSocket hub |
 | [Agent](agent.md) | Rust | Technique execution on endpoints |
 

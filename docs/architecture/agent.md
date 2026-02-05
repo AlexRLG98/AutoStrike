@@ -288,7 +288,7 @@ cargo build --release --target aarch64-apple-darwin
 
 ## Testing
 
-61 unit tests across all modules:
+67 unit tests across all modules:
 
 ```bash
 cd agent

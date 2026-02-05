@@ -356,14 +356,14 @@ Environment variables:
 ## Testing
 
 Test coverage (Phase 3):
-- **application**: 93.9%
-- **entity**: 100%
+- **application**: 83.0%
+- **entity**: 95.0%
 - **service**: 99.2%
-- **handlers**: 93.7%
+- **handlers**: 87.5%
 - **websocket**: 91.6%
-- **middleware**: 100%
-- **rest/server**: 90.0%
-- **sqlite**: 74.2%
+- **middleware**: 94.3%
+- **rest/server**: 87.9%
+- **sqlite**: 85.0%
 
 ```bash
 cd server

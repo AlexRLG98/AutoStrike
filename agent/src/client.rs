@@ -4,7 +4,14 @@ use anyhow::{Context, Result};
 use futures_util::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
 use tokio::time::{interval, Duration};
-use tokio_tungstenite::{connect_async, tungstenite::Message as WsMessage};
+use tokio_tungstenite::{
+    connect_async_with_config,
+    tungstenite::{
+        client::IntoClientRequest,
+        http::header::{HeaderName, HeaderValue},
+        Message as WsMessage,
+    },
+};
 use tracing::{debug, error, info, warn};
 
 use crate::config::AgentConfig;
@@ -109,7 +116,17 @@ impl AgentClient {
 
         info!("Connecting to {}", ws_url);
 
-        let (ws_stream, _) = connect_async(&ws_url)
+        // Build request with optional X-Agent-Key header
+        let mut request = ws_url.into_client_request()?;
+        if let Some(ref secret) = self.config.agent_secret {
+            request.headers_mut().insert(
+                HeaderName::from_static("x-agent-key"),
+                HeaderValue::from_str(secret).context("Invalid agent secret value")?,
+            );
+            debug!("Added X-Agent-Key header for authentication");
+        }
+
+        let (ws_stream, _) = connect_async_with_config(request, None)
             .await
             .context("Failed to connect to server")?;
 
@@ -279,6 +296,17 @@ mod tests {
             paw: "test-paw-123".to_string(),
             heartbeat_interval: 30,
             tls: TlsConfig::default(),
+            agent_secret: None,
+        }
+    }
+
+    fn create_test_config_with_secret() -> AgentConfig {
+        AgentConfig {
+            server_url: "https://test.server:8443".to_string(),
+            paw: "test-paw-123".to_string(),
+            heartbeat_interval: 30,
+            tls: TlsConfig::default(),
+            agent_secret: Some("test-secret".to_string()),
         }
     }
 
@@ -332,6 +360,15 @@ mod tests {
 
         let client = AgentClient::new(config, sys_info);
         assert!(client.is_ok());
+    }
+
+    #[test]
+    fn test_agent_client_with_secret() {
+        let config = create_test_config_with_secret();
+        let sys_info = create_test_sys_info();
+
+        let client = AgentClient::new(config, sys_info).unwrap();
+        assert_eq!(client.config.agent_secret, Some("test-secret".to_string()));
     }
 
     #[tokio::test]
