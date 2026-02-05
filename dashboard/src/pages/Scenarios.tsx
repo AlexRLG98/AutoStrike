@@ -63,12 +63,16 @@ export default function Scenarios() {
     errors?: string[];
   } | null>(null);
 
+  // Phase counter for generating unique IDs
+  const [phaseIdCounter, setPhaseIdCounter] = useState(1);
+
   // Create scenario form initial state
+  const createInitialPhase = (id: number) => ({ id: `phase-${id}`, name: `Phase ${id}`, techniques: [] as string[] });
   const initialScenarioForm = {
     name: '',
     description: '',
     tags: '',
-    phases: [{ name: 'Phase 1', techniques: [] as string[] }],
+    phases: [createInitialPhase(1)],
   };
 
   // Create scenario form state
@@ -76,7 +80,8 @@ export default function Scenarios() {
 
   // Reset form helper
   const resetCreateForm = () => {
-    setNewScenario({ ...initialScenarioForm, phases: [{ name: 'Phase 1', techniques: [] }] });
+    setPhaseIdCounter(1);
+    setNewScenario({ ...initialScenarioForm, phases: [createInitialPhase(1)] });
   };
 
   const { data: scenarios, isLoading } = useQuery<Scenario[]>({
@@ -236,9 +241,11 @@ export default function Scenarios() {
   };
 
   const handleAddPhase = () => {
+    const newId = phaseIdCounter + 1;
+    setPhaseIdCounter(newId);
     setNewScenario(prev => ({
       ...prev,
-      phases: [...prev.phases, { name: `Phase ${prev.phases.length + 1}`, techniques: [] }],
+      phases: [...prev.phases, createInitialPhase(newId)],
     }));
   };
 
@@ -257,9 +264,9 @@ export default function Scenarios() {
   };
 
   const toggleTechniqueInPhase = (
-    phase: { name: string; techniques: string[] },
+    phase: { id: string; name: string; techniques: string[] },
     techniqueId: string
-  ): { name: string; techniques: string[] } => {
+  ): { id: string; name: string; techniques: string[] } => {
     const hasTechnique = phase.techniques.includes(techniqueId);
     const updatedTechniques = hasTechnique
       ? phase.techniques.filter(t => t !== techniqueId)
@@ -554,11 +561,11 @@ export default function Scenarios() {
                   </div>
                   <div className="space-y-4">
                     {newScenario.phases.map((phase, phaseIndex) => (
-                      <div key={`phase-${phaseIndex}`} className="border rounded-lg p-4">
+                      <div key={phase.id} className="border rounded-lg p-4">
                         <div className="flex justify-between items-center mb-3">
-                          <label className="sr-only" htmlFor={`phase-name-${phaseIndex}`}>Phase name</label>
+                          <label className="sr-only" htmlFor={`phase-name-${phase.id}`}>Phase name</label>
                           <input
-                            id={`phase-name-${phaseIndex}`}
+                            id={`phase-name-${phase.id}`}
                             type="text"
                             value={phase.name}
                             onChange={(e) => handlePhaseNameChange(phaseIndex, e.target.value)}
@@ -569,6 +576,7 @@ export default function Scenarios() {
                               type="button"
                               onClick={() => handleRemovePhase(phaseIndex)}
                               className="text-red-500 hover:text-red-700"
+                              aria-label={`Remove ${phase.name}`}
                             >
                               <TrashIcon className="h-5 w-5" />
                             </button>
@@ -578,6 +586,7 @@ export default function Scenarios() {
                           {techniques?.map((technique) => (
                             <label
                               key={technique.id}
+                              aria-label={`Select technique ${technique.id} ${technique.name}`}
                               className={`flex items-center gap-2 p-2 border rounded cursor-pointer hover:bg-gray-50 ${
                                 phase.techniques.includes(technique.id) ? 'border-primary-500 bg-primary-50' : ''
                               }`}
@@ -587,8 +596,9 @@ export default function Scenarios() {
                                 checked={phase.techniques.includes(technique.id)}
                                 onChange={() => handleTechniqueToggle(phaseIndex, technique.id)}
                                 className="rounded text-primary-600 focus:ring-primary-500"
+                                aria-label={`${technique.id} ${technique.name}`}
                               />
-                              <span className="text-sm truncate">
+                              <span className="text-sm truncate" aria-hidden="true">
                                 <span className="font-mono text-xs text-gray-500">{technique.id}</span>
                                 <span className="ml-1">{technique.name}</span>
                               </span>

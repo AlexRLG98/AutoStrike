@@ -108,12 +108,13 @@ function StopConfirmModal({ execution, onConfirm, onCancel, isLoading }: Readonl
  * Scenario Selection Modal for new executions
  */
 interface ScenarioSelectModalProps {
-  readonly scenarios: Scenario[];
+  readonly scenarios: Scenario[] | undefined;
+  readonly isLoading: boolean;
   readonly onSelect: (scenario: Scenario) => void;
   readonly onCancel: () => void;
 }
 
-function ScenarioSelectModal({ scenarios, onSelect, onCancel }: Readonly<ScenarioSelectModalProps>) {
+function ScenarioSelectModal({ scenarios, isLoading, onSelect, onCancel }: Readonly<ScenarioSelectModalProps>) {
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
       <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full mx-4 max-h-[80vh] overflow-hidden flex flex-col">
@@ -127,7 +128,11 @@ function ScenarioSelectModal({ scenarios, onSelect, onCancel }: Readonly<Scenari
           </button>
         </div>
         <div className="p-6 overflow-y-auto flex-1">
-          {scenarios.length === 0 ? (
+          {isLoading ? (
+            <div className="flex justify-center py-8">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
+            </div>
+          ) : !scenarios || scenarios.length === 0 ? (
             <p className="text-gray-500 text-center py-8">No scenarios available. Create a scenario first.</p>
           ) : (
             <div className="space-y-3">
@@ -197,7 +202,7 @@ export default function Executions() {
     refetchInterval: 5000, // Fallback polling every 5 seconds
   });
 
-  const { data: scenarios } = useQuery<Scenario[]>({
+  const { data: scenarios, isLoading: isScenariosLoading } = useQuery<Scenario[]>({
     queryKey: ['scenarios'],
     queryFn: () => api.get('/scenarios').then(res => res.data),
   });
@@ -396,9 +401,10 @@ export default function Executions() {
       )}
 
       {/* Scenario Selection Modal */}
-      {showScenarioSelect && scenarios && (
+      {showScenarioSelect && (
         <ScenarioSelectModal
           scenarios={scenarios}
+          isLoading={isScenariosLoading}
           onSelect={handleScenarioSelect}
           onCancel={() => setShowScenarioSelect(false)}
         />
