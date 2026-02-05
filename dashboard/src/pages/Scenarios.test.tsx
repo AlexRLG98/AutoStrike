@@ -17,6 +17,7 @@ vi.mock('../lib/api', () => ({
   scenarioApi: {
     exportAll: vi.fn(),
     import: vi.fn(),
+    create: vi.fn(),
   },
 }));
 
@@ -846,6 +847,471 @@ describe('Scenarios Import/Export', () => {
       expect(scenarioApi.import).toHaveBeenCalledWith({
         version: '1.0',
         scenarios: [{ name: 'Test', phases: [], tags: [] }],
+      });
+    });
+  });
+});
+
+describe('Scenarios Create Modal', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  const mockTechniques = [
+    { id: 'T1082', name: 'System Info Discovery', tactic: 'discovery', platforms: ['windows', 'linux'], is_safe: true },
+    { id: 'T1083', name: 'File Discovery', tactic: 'discovery', platforms: ['windows'], is_safe: true },
+    { id: 'T1057', name: 'Process Discovery', tactic: 'discovery', platforms: ['windows', 'linux'], is_safe: true },
+  ];
+
+  it('opens create modal when Create Scenario button is clicked', async () => {
+    vi.mocked(api.get).mockImplementation((url) => {
+      if (url === '/scenarios') return Promise.resolve({ data: [] });
+      if (url === '/techniques') return Promise.resolve({ data: mockTechniques });
+      return Promise.resolve({ data: [] });
+    });
+
+    renderWithClient(<Scenarios />);
+
+    await screen.findByText('Scenarios');
+    fireEvent.click(screen.getByText('Create Scenario'));
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: 'Create Scenario' })).toBeInTheDocument();
+    });
+  });
+
+  it('displays form fields in create modal', async () => {
+    vi.mocked(api.get).mockImplementation((url) => {
+      if (url === '/scenarios') return Promise.resolve({ data: [] });
+      if (url === '/techniques') return Promise.resolve({ data: mockTechniques });
+      return Promise.resolve({ data: [] });
+    });
+
+    renderWithClient(<Scenarios />);
+
+    await screen.findByText('Scenarios');
+    fireEvent.click(screen.getByText('Create Scenario'));
+
+    await waitFor(() => {
+      expect(screen.getByPlaceholderText('My Attack Scenario')).toBeInTheDocument();
+      expect(screen.getByPlaceholderText('discovery, safe, windows')).toBeInTheDocument();
+      expect(screen.getByPlaceholderText('Describe the purpose of this scenario...')).toBeInTheDocument();
+      // Phase name is in an input field
+      expect(screen.getByDisplayValue('Phase 1')).toBeInTheDocument();
+    });
+  });
+
+  it('closes create modal when X is clicked', async () => {
+    vi.mocked(api.get).mockImplementation((url) => {
+      if (url === '/scenarios') return Promise.resolve({ data: [] });
+      if (url === '/techniques') return Promise.resolve({ data: mockTechniques });
+      return Promise.resolve({ data: [] });
+    });
+
+    renderWithClient(<Scenarios />);
+
+    await screen.findByText('Scenarios');
+    fireEvent.click(screen.getByText('Create Scenario'));
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: 'Create Scenario' })).toBeInTheDocument();
+    });
+
+    // Click Cancel button
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+
+    await waitFor(() => {
+      expect(screen.queryByRole('heading', { name: 'Create Scenario' })).not.toBeInTheDocument();
+    });
+  });
+
+  it('shows error toast when name is empty', async () => {
+    vi.mocked(api.get).mockImplementation((url) => {
+      if (url === '/scenarios') return Promise.resolve({ data: [] });
+      if (url === '/techniques') return Promise.resolve({ data: mockTechniques });
+      return Promise.resolve({ data: [] });
+    });
+
+    renderWithClient(<Scenarios />);
+
+    await screen.findByText('Scenarios');
+    fireEvent.click(screen.getByText('Create Scenario'));
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: 'Create Scenario' })).toBeInTheDocument();
+    });
+
+    // Click Create without filling name
+    const createButtons = screen.getAllByRole('button', { name: /create scenario/i });
+    const submitButton = createButtons.find(btn => btn.closest('.border-t'));
+    if (submitButton) {
+      fireEvent.click(submitButton);
+    }
+
+    await waitFor(() => {
+      expect(toast.error).toHaveBeenCalledWith('Scenario name is required');
+    });
+  });
+
+  it('shows error toast when no techniques selected', async () => {
+    vi.mocked(api.get).mockImplementation((url) => {
+      if (url === '/scenarios') return Promise.resolve({ data: [] });
+      if (url === '/techniques') return Promise.resolve({ data: mockTechniques });
+      return Promise.resolve({ data: [] });
+    });
+
+    renderWithClient(<Scenarios />);
+
+    await screen.findByText('Scenarios');
+    fireEvent.click(screen.getByText('Create Scenario'));
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: 'Create Scenario' })).toBeInTheDocument();
+    });
+
+    // Fill name but don't select techniques
+    fireEvent.change(screen.getByPlaceholderText('My Attack Scenario'), {
+      target: { value: 'Test Scenario' },
+    });
+
+    // Click Create
+    const createButtons = screen.getAllByRole('button', { name: /create scenario/i });
+    const submitButton = createButtons.find(btn => btn.closest('.border-t'));
+    if (submitButton) {
+      fireEvent.click(submitButton);
+    }
+
+    await waitFor(() => {
+      expect(toast.error).toHaveBeenCalledWith('At least one technique is required');
+    });
+  });
+
+  it('creates scenario successfully', async () => {
+    vi.mocked(api.get).mockImplementation((url) => {
+      if (url === '/scenarios') return Promise.resolve({ data: [] });
+      if (url === '/techniques') return Promise.resolve({ data: mockTechniques });
+      return Promise.resolve({ data: [] });
+    });
+    vi.mocked(scenarioApi.create).mockResolvedValue({ data: { id: 'new-scenario' } } as never);
+
+    renderWithClient(<Scenarios />);
+
+    await screen.findByText('Scenarios');
+    fireEvent.click(screen.getByText('Create Scenario'));
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: 'Create Scenario' })).toBeInTheDocument();
+    });
+
+    // Fill form
+    fireEvent.change(screen.getByPlaceholderText('My Attack Scenario'), {
+      target: { value: 'New Test Scenario' },
+    });
+    fireEvent.change(screen.getByPlaceholderText('Describe the purpose of this scenario...'), {
+      target: { value: 'A test description' },
+    });
+    fireEvent.change(screen.getByPlaceholderText('discovery, safe, windows'), {
+      target: { value: 'test, discovery' },
+    });
+
+    // Select a technique - find the checkbox by technique ID
+    const techniqueCheckbox = screen.getByRole('checkbox', { name: /T1082/i });
+    fireEvent.click(techniqueCheckbox);
+
+    // Submit
+    const createButtons = screen.getAllByRole('button', { name: /create scenario/i });
+    const submitButton = createButtons.find(btn => btn.closest('.border-t'));
+    if (submitButton) {
+      fireEvent.click(submitButton);
+    }
+
+    await waitFor(() => {
+      expect(scenarioApi.create).toHaveBeenCalledWith({
+        name: 'New Test Scenario',
+        description: 'A test description',
+        tags: ['test', 'discovery'],
+        phases: [{ name: 'Phase 1', techniques: ['T1082'], order: 1 }],
+      });
+      expect(toast.success).toHaveBeenCalledWith('Scenario created successfully');
+    });
+  });
+
+  it('adds a new phase', async () => {
+    vi.mocked(api.get).mockImplementation((url) => {
+      if (url === '/scenarios') return Promise.resolve({ data: [] });
+      if (url === '/techniques') return Promise.resolve({ data: mockTechniques });
+      return Promise.resolve({ data: [] });
+    });
+
+    renderWithClient(<Scenarios />);
+
+    await screen.findByText('Scenarios');
+    fireEvent.click(screen.getByText('Create Scenario'));
+
+    await waitFor(() => {
+      // Phase name is in an input field
+      expect(screen.getByDisplayValue('Phase 1')).toBeInTheDocument();
+    });
+
+    // Click Add Phase
+    fireEvent.click(screen.getByText('Add Phase'));
+
+    await waitFor(() => {
+      expect(screen.getByDisplayValue('Phase 2')).toBeInTheDocument();
+    });
+  });
+
+  it('removes a phase', async () => {
+    vi.mocked(api.get).mockImplementation((url) => {
+      if (url === '/scenarios') return Promise.resolve({ data: [] });
+      if (url === '/techniques') return Promise.resolve({ data: mockTechniques });
+      return Promise.resolve({ data: [] });
+    });
+
+    renderWithClient(<Scenarios />);
+
+    await screen.findByText('Scenarios');
+    fireEvent.click(screen.getByText('Create Scenario'));
+
+    await waitFor(() => {
+      // Phase name is in an input field
+      expect(screen.getByDisplayValue('Phase 1')).toBeInTheDocument();
+    });
+
+    // Add a phase first
+    fireEvent.click(screen.getByText('Add Phase'));
+
+    await waitFor(() => {
+      expect(screen.getByDisplayValue('Phase 2')).toBeInTheDocument();
+    });
+
+    // Find and click the trash button for Phase 2
+    const trashButtons = document.querySelectorAll('.text-red-500');
+    if (trashButtons.length > 0) {
+      fireEvent.click(trashButtons[trashButtons.length - 1]);
+    }
+
+    await waitFor(() => {
+      expect(screen.queryByDisplayValue('Phase 2')).not.toBeInTheDocument();
+    });
+  });
+
+  it('renames a phase', async () => {
+    vi.mocked(api.get).mockImplementation((url) => {
+      if (url === '/scenarios') return Promise.resolve({ data: [] });
+      if (url === '/techniques') return Promise.resolve({ data: mockTechniques });
+      return Promise.resolve({ data: [] });
+    });
+
+    renderWithClient(<Scenarios />);
+
+    await screen.findByText('Scenarios');
+    fireEvent.click(screen.getByText('Create Scenario'));
+
+    await waitFor(() => {
+      expect(screen.getByDisplayValue('Phase 1')).toBeInTheDocument();
+    });
+
+    // Change phase name
+    fireEvent.change(screen.getByDisplayValue('Phase 1'), {
+      target: { value: 'Reconnaissance Phase' },
+    });
+
+    expect(screen.getByDisplayValue('Reconnaissance Phase')).toBeInTheDocument();
+  });
+
+  it('toggles technique selection', async () => {
+    vi.mocked(api.get).mockImplementation((url) => {
+      if (url === '/scenarios') return Promise.resolve({ data: [] });
+      if (url === '/techniques') return Promise.resolve({ data: mockTechniques });
+      return Promise.resolve({ data: [] });
+    });
+
+    renderWithClient(<Scenarios />);
+
+    await screen.findByText('Scenarios');
+    fireEvent.click(screen.getByText('Create Scenario'));
+
+    await waitFor(() => {
+      expect(screen.getByText('0 technique(s) selected')).toBeInTheDocument();
+    });
+
+    // Select a technique
+    const techniqueCheckbox = screen.getByRole('checkbox', { name: /T1082/i });
+    fireEvent.click(techniqueCheckbox);
+
+    await waitFor(() => {
+      expect(screen.getByText('1 technique(s) selected')).toBeInTheDocument();
+    });
+
+    // Deselect the technique
+    fireEvent.click(techniqueCheckbox);
+
+    await waitFor(() => {
+      expect(screen.getByText('0 technique(s) selected')).toBeInTheDocument();
+    });
+  });
+
+  it('handles create error with message', async () => {
+    vi.mocked(api.get).mockImplementation((url) => {
+      if (url === '/scenarios') return Promise.resolve({ data: [] });
+      if (url === '/techniques') return Promise.resolve({ data: mockTechniques });
+      return Promise.resolve({ data: [] });
+    });
+    vi.mocked(scenarioApi.create).mockRejectedValue({
+      response: { data: { error: 'Scenario already exists' } },
+    } as never);
+
+    renderWithClient(<Scenarios />);
+
+    await screen.findByText('Scenarios');
+    fireEvent.click(screen.getByText('Create Scenario'));
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: 'Create Scenario' })).toBeInTheDocument();
+    });
+
+    // Fill form
+    fireEvent.change(screen.getByPlaceholderText('My Attack Scenario'), {
+      target: { value: 'Existing Scenario' },
+    });
+
+    // Select a technique
+    const techniqueCheckbox = screen.getByRole('checkbox', { name: /T1082/i });
+    fireEvent.click(techniqueCheckbox);
+
+    // Submit
+    const createButtons = screen.getAllByRole('button', { name: /create scenario/i });
+    const submitButton = createButtons.find(btn => btn.closest('.border-t'));
+    if (submitButton) {
+      fireEvent.click(submitButton);
+    }
+
+    await waitFor(() => {
+      expect(toast.error).toHaveBeenCalledWith('Scenario already exists');
+    });
+  });
+
+  it('handles create error without message', async () => {
+    vi.mocked(api.get).mockImplementation((url) => {
+      if (url === '/scenarios') return Promise.resolve({ data: [] });
+      if (url === '/techniques') return Promise.resolve({ data: mockTechniques });
+      return Promise.resolve({ data: [] });
+    });
+    vi.mocked(scenarioApi.create).mockRejectedValue(new Error('Network error') as never);
+
+    renderWithClient(<Scenarios />);
+
+    await screen.findByText('Scenarios');
+    fireEvent.click(screen.getByText('Create Scenario'));
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: 'Create Scenario' })).toBeInTheDocument();
+    });
+
+    // Fill form
+    fireEvent.change(screen.getByPlaceholderText('My Attack Scenario'), {
+      target: { value: 'Network Fail Scenario' },
+    });
+
+    // Select a technique
+    const techniqueCheckbox = screen.getByRole('checkbox', { name: /T1082/i });
+    fireEvent.click(techniqueCheckbox);
+
+    // Submit
+    const createButtons = screen.getAllByRole('button', { name: /create scenario/i });
+    const submitButton = createButtons.find(btn => btn.closest('.border-t'));
+    if (submitButton) {
+      fireEvent.click(submitButton);
+    }
+
+    await waitFor(() => {
+      expect(toast.error).toHaveBeenCalledWith('Failed to create scenario');
+    });
+  });
+
+  it('resets form after successful creation', async () => {
+    vi.mocked(api.get).mockImplementation((url) => {
+      if (url === '/scenarios') return Promise.resolve({ data: [] });
+      if (url === '/techniques') return Promise.resolve({ data: mockTechniques });
+      return Promise.resolve({ data: [] });
+    });
+    vi.mocked(scenarioApi.create).mockResolvedValue({ data: { id: 'new-scenario' } } as never);
+
+    renderWithClient(<Scenarios />);
+
+    await screen.findByText('Scenarios');
+    fireEvent.click(screen.getByText('Create Scenario'));
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: 'Create Scenario' })).toBeInTheDocument();
+    });
+
+    // Fill form
+    fireEvent.change(screen.getByPlaceholderText('My Attack Scenario'), {
+      target: { value: 'Reset Test' },
+    });
+
+    // Select a technique
+    const techniqueCheckbox = screen.getByRole('checkbox', { name: /T1082/i });
+    fireEvent.click(techniqueCheckbox);
+
+    // Submit
+    const createButtons = screen.getAllByRole('button', { name: /create scenario/i });
+    const submitButton = createButtons.find(btn => btn.closest('.border-t'));
+    if (submitButton) {
+      fireEvent.click(submitButton);
+    }
+
+    await waitFor(() => {
+      expect(toast.success).toHaveBeenCalledWith('Scenario created successfully');
+    });
+
+    // Modal should close
+    await waitFor(() => {
+      expect(screen.queryByRole('heading', { name: 'Create Scenario' })).not.toBeInTheDocument();
+    });
+  });
+
+  it('handles empty tags correctly', async () => {
+    vi.mocked(api.get).mockImplementation((url) => {
+      if (url === '/scenarios') return Promise.resolve({ data: [] });
+      if (url === '/techniques') return Promise.resolve({ data: mockTechniques });
+      return Promise.resolve({ data: [] });
+    });
+    vi.mocked(scenarioApi.create).mockResolvedValue({ data: { id: 'new-scenario' } } as never);
+
+    renderWithClient(<Scenarios />);
+
+    await screen.findByText('Scenarios');
+    fireEvent.click(screen.getByText('Create Scenario'));
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: 'Create Scenario' })).toBeInTheDocument();
+    });
+
+    // Fill name only (no tags)
+    fireEvent.change(screen.getByPlaceholderText('My Attack Scenario'), {
+      target: { value: 'No Tags Scenario' },
+    });
+
+    // Select a technique
+    const techniqueCheckbox = screen.getByRole('checkbox', { name: /T1082/i });
+    fireEvent.click(techniqueCheckbox);
+
+    // Submit
+    const createButtons = screen.getAllByRole('button', { name: /create scenario/i });
+    const submitButton = createButtons.find(btn => btn.closest('.border-t'));
+    if (submitButton) {
+      fireEvent.click(submitButton);
+    }
+
+    await waitFor(() => {
+      expect(scenarioApi.create).toHaveBeenCalledWith({
+        name: 'No Tags Scenario',
+        description: '',
+        tags: [],
+        phases: [{ name: 'Phase 1', techniques: ['T1082'], order: 1 }],
       });
     });
   });

@@ -255,6 +255,74 @@ export const adminApi = {
     api.post(`/admin/users/${id}/reset-password`, data),
 };
 
+// Technique types
+export interface Technique {
+  id: string;
+  name: string;
+  description: string;
+  tactic: string;
+  platforms: string[];
+  executors: TechniqueExecutor[];
+  detection: TechniqueDetection[];
+  is_safe: boolean;
+}
+
+export interface TechniqueExecutor {
+  type: string;
+  command: string;
+  platform?: string;
+  timeout: number;
+}
+
+export interface TechniqueDetection {
+  source: string;
+  indicator: string;
+}
+
+export interface ImportTechniquesRequest {
+  techniques: Technique[];
+}
+
+export interface ImportTechniquesResponse {
+  imported: number;
+  failed: number;
+  errors?: string[];
+}
+
+// Technique API methods
+export const techniqueApi = {
+  /**
+   * List all techniques
+   */
+  list: () => api.get<Technique[]>('/techniques'),
+
+  /**
+   * Get technique by ID
+   */
+  get: (id: string) => api.get<Technique>(`/techniques/${id}`),
+
+  /**
+   * Get techniques by tactic
+   */
+  getByTactic: (tactic: string) => api.get<Technique[]>(`/techniques/tactic/${tactic}`),
+
+  /**
+   * Get techniques by platform
+   */
+  getByPlatform: (platform: string) => api.get<Technique[]>(`/techniques/platform/${platform}`),
+
+  /**
+   * Get MITRE ATT&CK coverage statistics
+   */
+  getCoverage: () => api.get<Record<string, number>>('/techniques/coverage'),
+
+  /**
+   * Import techniques from JSON
+   */
+  import: (techniques: Technique[]) =>
+    api.post<ImportTechniquesResponse>('/techniques/import/json', { techniques }),
+};
+
 // Execution API methods
 export const executionApi = {
   /**

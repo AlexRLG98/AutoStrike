@@ -1,11 +1,12 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { ComputerDesktopIcon, XMarkIcon, ClipboardIcon, CheckIcon } from '@heroicons/react/24/outline';
+import { ComputerDesktopIcon, ClipboardIcon, CheckIcon } from '@heroicons/react/24/outline';
 import { api } from '../lib/api';
 import { formatDistanceToNow } from 'date-fns';
 import { Agent } from '../types';
 import { LoadingState } from '../components/LoadingState';
 import { EmptyState } from '../components/EmptyState';
+import { Modal } from '../components/Modal';
 
 /**
  * Agents page component.
@@ -50,98 +51,56 @@ export default function Agents() {
 
       {/* Deploy Agent Modal */}
       {showDeployModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl shadow-xl max-w-lg w-full mx-4">
-            <div className="flex items-center justify-between p-6 border-b">
-              <h2 className="text-xl font-semibold">Deploy Agent</h2>
-              <button
-                onClick={() => setShowDeployModal(false)}
-                className="p-2 hover:bg-gray-100 rounded-lg"
-              >
-                <XMarkIcon className="h-5 w-5" />
-              </button>
-            </div>
-            <div className="p-6 space-y-4">
-              <p className="text-gray-600">
-                Download the agent binary for your platform and run:
-              </p>
-
-              <div className="space-y-3">
-                <div>
-                  <span className="text-sm font-medium text-gray-700">Linux / macOS</span>
-                  <div className="mt-1 flex items-center gap-2">
-                    <code className="flex-1 bg-gray-100 px-3 py-2 rounded text-sm font-mono overflow-x-auto">
-                      {commands.linux}
-                    </code>
-                    <button
-                      onClick={() => copyToClipboard(commands.linux, 'linux')}
-                      className="p-2 hover:bg-gray-100 rounded"
-                      title="Copy"
-                    >
-                      {copiedCommand === 'linux' ? (
-                        <CheckIcon className="h-5 w-5 text-green-500" />
-                      ) : (
-                        <ClipboardIcon className="h-5 w-5 text-gray-400" />
-                      )}
-                    </button>
-                  </div>
-                </div>
-
-                <div>
-                  <span className="text-sm font-medium text-gray-700">Windows</span>
-                  <div className="mt-1 flex items-center gap-2">
-                    <code className="flex-1 bg-gray-100 px-3 py-2 rounded text-sm font-mono overflow-x-auto">
-                      {commands.windows}
-                    </code>
-                    <button
-                      onClick={() => copyToClipboard(commands.windows, 'windows')}
-                      className="p-2 hover:bg-gray-100 rounded"
-                      title="Copy"
-                    >
-                      {copiedCommand === 'windows' ? (
-                        <CheckIcon className="h-5 w-5 text-green-500" />
-                      ) : (
-                        <ClipboardIcon className="h-5 w-5 text-gray-400" />
-                      )}
-                    </button>
-                  </div>
-                </div>
-
-                <div>
-                  <span className="text-sm font-medium text-gray-700">Docker</span>
-                  <div className="mt-1 flex items-center gap-2">
-                    <code className="flex-1 bg-gray-100 px-3 py-2 rounded text-sm font-mono overflow-x-auto">
-                      {commands.docker}
-                    </code>
-                    <button
-                      onClick={() => copyToClipboard(commands.docker, 'docker')}
-                      className="p-2 hover:bg-gray-100 rounded"
-                      title="Copy"
-                    >
-                      {copiedCommand === 'docker' ? (
-                        <CheckIcon className="h-5 w-5 text-green-500" />
-                      ) : (
-                        <ClipboardIcon className="h-5 w-5 text-gray-400" />
-                      )}
-                    </button>
-                  </div>
+        <Modal
+          title="Deploy Agent"
+          onClose={() => setShowDeployModal(false)}
+          maxWidth="max-w-lg"
+          footer={<button onClick={() => setShowDeployModal(false)} className="btn-primary">Close</button>}
+        >
+          <div className="space-y-4">
+            <p className="text-gray-600">
+              Download the agent binary for your platform and run:
+            </p>
+            <div className="space-y-3">
+              <div>
+                <span className="text-sm font-medium text-gray-700">Linux / macOS</span>
+                <div className="mt-1 flex items-center gap-2">
+                  <code className="flex-1 bg-gray-100 px-3 py-2 rounded text-sm font-mono overflow-x-auto">
+                    {commands.linux}
+                  </code>
+                  <button onClick={() => copyToClipboard(commands.linux, 'linux')} className="p-2 hover:bg-gray-100 rounded" title="Copy">
+                    {copiedCommand === 'linux' ? <CheckIcon className="h-5 w-5 text-green-500" /> : <ClipboardIcon className="h-5 w-5 text-gray-400" />}
+                  </button>
                 </div>
               </div>
-
-              <p className="text-sm text-gray-500 mt-4">
-                The agent will automatically register with the server once started.
-              </p>
+              <div>
+                <span className="text-sm font-medium text-gray-700">Windows</span>
+                <div className="mt-1 flex items-center gap-2">
+                  <code className="flex-1 bg-gray-100 px-3 py-2 rounded text-sm font-mono overflow-x-auto">
+                    {commands.windows}
+                  </code>
+                  <button onClick={() => copyToClipboard(commands.windows, 'windows')} className="p-2 hover:bg-gray-100 rounded" title="Copy">
+                    {copiedCommand === 'windows' ? <CheckIcon className="h-5 w-5 text-green-500" /> : <ClipboardIcon className="h-5 w-5 text-gray-400" />}
+                  </button>
+                </div>
+              </div>
+              <div>
+                <span className="text-sm font-medium text-gray-700">Docker</span>
+                <div className="mt-1 flex items-center gap-2">
+                  <code className="flex-1 bg-gray-100 px-3 py-2 rounded text-sm font-mono overflow-x-auto">
+                    {commands.docker}
+                  </code>
+                  <button onClick={() => copyToClipboard(commands.docker, 'docker')} className="p-2 hover:bg-gray-100 rounded" title="Copy">
+                    {copiedCommand === 'docker' ? <CheckIcon className="h-5 w-5 text-green-500" /> : <ClipboardIcon className="h-5 w-5 text-gray-400" />}
+                  </button>
+                </div>
+              </div>
             </div>
-            <div className="flex justify-end p-6 border-t">
-              <button
-                onClick={() => setShowDeployModal(false)}
-                className="btn-primary"
-              >
-                Close
-              </button>
-            </div>
+            <p className="text-sm text-gray-500 mt-4">
+              The agent will automatically register with the server once started.
+            </p>
           </div>
-        </div>
+        </Modal>
       )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">

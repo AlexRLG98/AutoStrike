@@ -3,7 +3,8 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import Executions from './Executions';
-import { executionApi } from '../lib/api';
+import { executionApi, api } from '../lib/api';
+import toast from 'react-hot-toast';
 
 // Mock the API
 vi.mock('../lib/api', () => ({
@@ -13,6 +14,7 @@ vi.mock('../lib/api', () => ({
   executionApi: {
     list: vi.fn(),
     stop: vi.fn(),
+    start: vi.fn(),
   },
 }));
 
@@ -40,6 +42,32 @@ vi.mock('react-hot-toast', () => ({
     success: vi.fn(),
     error: vi.fn(),
   },
+}));
+
+// Mock RunExecutionModal for controlled testing
+vi.mock('../components/RunExecutionModal', () => ({
+  RunExecutionModal: ({
+    scenario,
+    onConfirm,
+    onCancel,
+    isLoading,
+  }: {
+    scenario: { name: string; id: string };
+    onConfirm: (agents: string[], safeMode: boolean) => void;
+    onCancel: () => void;
+    isLoading: boolean;
+  }) => (
+    <div data-testid="run-execution-modal">
+      <span data-testid="modal-scenario-name">{scenario.name}</span>
+      <span data-testid="modal-loading">{isLoading ? 'true' : 'false'}</span>
+      <button data-testid="modal-run-confirm" onClick={() => onConfirm(['agent-1'], true)}>
+        Run Execution
+      </button>
+      <button data-testid="modal-run-cancel" onClick={onCancel}>
+        Cancel Run
+      </button>
+    </div>
+  ),
 }));
 
 const createTestQueryClient = () =>
@@ -479,5 +507,321 @@ describe('Executions Page', () => {
 
     // Should not cause any errors
     expect(capturedOnMessage).toBeDefined();
+  });
+});
+
+describe('New Execution Flow', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    capturedOnMessage = undefined;
+  });
+
+  it('opens scenario select modal when New Execution button is clicked', async () => {
+    vi.mocked(executionApi.list).mockResolvedValue({ data: [] } as never);
+    vi.mocked(api.get).mockResolvedValue({
+      data: [
+        {
+          id: 'scenario-1',
+          name: 'Test Scenario',
+          description: 'A test scenario',
+          phases: [{ name: 'Phase 1', techniques: ['T1082'] }],
+          tags: ['safe'],
+        },
+      ],
+    } as never);
+
+    renderWithClient(<Executions />);
+
+    await screen.findByText('New Execution');
+    fireEvent.click(screen.getByText('New Execution'));
+
+    await waitFor(() => {
+      expect(screen.getByText('Select Scenario')).toBeInTheDocument();
+    });
+  });
+
+  it('displays scenarios in the select modal', async () => {
+    vi.mocked(executionApi.list).mockResolvedValue({ data: [] } as never);
+    vi.mocked(api.get).mockResolvedValue({
+      data: [
+        {
+          id: 'scenario-1',
+          name: 'Discovery Scenario',
+          description: 'Test discovery techniques',
+          phases: [{ name: 'Phase 1', techniques: ['T1082'] }],
+          tags: ['discovery', 'safe'],
+        },
+        {
+          id: 'scenario-2',
+          name: 'Execution Scenario',
+          description: 'Test execution techniques',
+          phases: [{ name: 'Phase 1', techniques: ['T1059'] }, { name: 'Phase 2', techniques: ['T1059.001'] }],
+          tags: ['execution'],
+        },
+      ],
+    } as never);
+
+    renderWithClient(<Executions />);
+
+    await screen.findByText('New Execution');
+    fireEvent.click(screen.getByText('New Execution'));
+
+    await waitFor(() => {
+      expect(screen.getByText('Discovery Scenario')).toBeInTheDocument();
+      expect(screen.getByText('Execution Scenario')).toBeInTheDocument();
+      expect(screen.getByText('Test discovery techniques')).toBeInTheDocument();
+      expect(screen.getByText('1 phases')).toBeInTheDocument();
+      expect(screen.getByText('2 phases')).toBeInTheDocument();
+    });
+  });
+
+  it('shows empty state when no scenarios available', async () => {
+    vi.mocked(executionApi.list).mockResolvedValue({ data: [] } as never);
+    vi.mocked(api.get).mockResolvedValue({ data: [] } as never);
+
+    renderWithClient(<Executions />);
+
+    await screen.findByText('New Execution');
+    fireEvent.click(screen.getByText('New Execution'));
+
+    await waitFor(() => {
+      expect(screen.getByText('No scenarios available. Create a scenario first.')).toBeInTheDocument();
+    });
+  });
+
+  it('closes scenario select modal when X is clicked', async () => {
+    vi.mocked(executionApi.list).mockResolvedValue({ data: [] } as never);
+    vi.mocked(api.get).mockResolvedValue({
+      data: [{ id: 'scenario-1', name: 'Test', description: 'Test', phases: [], tags: [] }],
+    } as never);
+
+    renderWithClient(<Executions />);
+
+    await screen.findByText('New Execution');
+    fireEvent.click(screen.getByText('New Execution'));
+
+    await waitFor(() => {
+      expect(screen.getByText('Select Scenario')).toBeInTheDocument();
+    });
+
+    // Find the close button in the modal
+    const modalHeader = screen.getByText('Select Scenario').closest('div');
+    const closeButton = modalHeader?.parentElement?.querySelector('button');
+    if (closeButton) {
+      fireEvent.click(closeButton);
+    }
+
+    await waitFor(() => {
+      expect(screen.queryByText('Select Scenario')).not.toBeInTheDocument();
+    });
+  });
+
+  it('opens RunExecutionModal when scenario is selected', async () => {
+    vi.mocked(executionApi.list).mockResolvedValue({ data: [] } as never);
+    vi.mocked(api.get).mockResolvedValue({
+      data: [
+        {
+          id: 'scenario-1',
+          name: 'Selected Scenario',
+          description: 'Will be selected',
+          phases: [{ name: 'Phase 1', techniques: ['T1082'] }],
+          tags: ['safe'],
+        },
+      ],
+    } as never);
+
+    renderWithClient(<Executions />);
+
+    await screen.findByText('New Execution');
+    fireEvent.click(screen.getByText('New Execution'));
+
+    await waitFor(() => {
+      expect(screen.getByText('Selected Scenario')).toBeInTheDocument();
+    });
+
+    // Click on the scenario to select it
+    fireEvent.click(screen.getByText('Selected Scenario'));
+
+    await waitFor(() => {
+      // RunExecutionModal should be displayed
+      expect(screen.getByTestId('run-execution-modal')).toBeInTheDocument();
+      expect(screen.getByTestId('modal-scenario-name')).toHaveTextContent('Selected Scenario');
+    });
+  });
+
+  it('starts execution when confirmed in RunExecutionModal', async () => {
+    vi.mocked(executionApi.list).mockResolvedValue({ data: [] } as never);
+    vi.mocked(api.get).mockResolvedValue({
+      data: [
+        {
+          id: 'scenario-run',
+          name: 'Runnable Scenario',
+          description: 'Will be run',
+          phases: [{ name: 'Phase 1', techniques: ['T1082'] }],
+          tags: [],
+        },
+      ],
+    } as never);
+    vi.mocked(executionApi.start).mockResolvedValue({ data: { id: 'exec-123' } } as never);
+
+    renderWithClient(<Executions />);
+
+    await screen.findByText('New Execution');
+    fireEvent.click(screen.getByText('New Execution'));
+
+    await waitFor(() => {
+      expect(screen.getByText('Runnable Scenario')).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByText('Runnable Scenario'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('run-execution-modal')).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByTestId('modal-run-confirm'));
+
+    await waitFor(() => {
+      expect(executionApi.start).toHaveBeenCalledWith('scenario-run', ['agent-1'], true);
+      expect(toast.success).toHaveBeenCalledWith('Execution started successfully');
+    });
+  });
+
+  it('closes RunExecutionModal when cancelled', async () => {
+    vi.mocked(executionApi.list).mockResolvedValue({ data: [] } as never);
+    vi.mocked(api.get).mockResolvedValue({
+      data: [
+        {
+          id: 'scenario-cancel',
+          name: 'Cancelable Scenario',
+          description: 'Will be cancelled',
+          phases: [{ name: 'Phase 1', techniques: ['T1082'] }],
+          tags: [],
+        },
+      ],
+    } as never);
+
+    renderWithClient(<Executions />);
+
+    await screen.findByText('New Execution');
+    fireEvent.click(screen.getByText('New Execution'));
+
+    await waitFor(() => {
+      expect(screen.getByText('Cancelable Scenario')).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByText('Cancelable Scenario'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('run-execution-modal')).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByTestId('modal-run-cancel'));
+
+    await waitFor(() => {
+      expect(screen.queryByTestId('run-execution-modal')).not.toBeInTheDocument();
+    });
+  });
+
+  it('shows error toast when start execution fails', async () => {
+    vi.mocked(executionApi.list).mockResolvedValue({ data: [] } as never);
+    vi.mocked(api.get).mockResolvedValue({
+      data: [
+        {
+          id: 'scenario-fail',
+          name: 'Failing Scenario',
+          description: 'Will fail',
+          phases: [{ name: 'Phase 1', techniques: ['T1082'] }],
+          tags: [],
+        },
+      ],
+    } as never);
+    vi.mocked(executionApi.start).mockRejectedValue({
+      response: { data: { error: 'No agents available' } },
+    } as never);
+
+    renderWithClient(<Executions />);
+
+    await screen.findByText('New Execution');
+    fireEvent.click(screen.getByText('New Execution'));
+
+    await waitFor(() => {
+      expect(screen.getByText('Failing Scenario')).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByText('Failing Scenario'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('run-execution-modal')).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByTestId('modal-run-confirm'));
+
+    await waitFor(() => {
+      expect(toast.error).toHaveBeenCalledWith('No agents available');
+    });
+  });
+
+  it('shows default error message when start fails without details', async () => {
+    vi.mocked(executionApi.list).mockResolvedValue({ data: [] } as never);
+    vi.mocked(api.get).mockResolvedValue({
+      data: [
+        {
+          id: 'scenario-network-fail',
+          name: 'Network Fail Scenario',
+          description: 'Network fails',
+          phases: [{ name: 'Phase 1', techniques: ['T1082'] }],
+          tags: [],
+        },
+      ],
+    } as never);
+    vi.mocked(executionApi.start).mockRejectedValue(new Error('Network error') as never);
+
+    renderWithClient(<Executions />);
+
+    await screen.findByText('New Execution');
+    fireEvent.click(screen.getByText('New Execution'));
+
+    await waitFor(() => {
+      expect(screen.getByText('Network Fail Scenario')).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByText('Network Fail Scenario'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('run-execution-modal')).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByTestId('modal-run-confirm'));
+
+    await waitFor(() => {
+      expect(toast.error).toHaveBeenCalledWith('Failed to start execution');
+    });
+  });
+
+  it('displays scenario tags in select modal', async () => {
+    vi.mocked(executionApi.list).mockResolvedValue({ data: [] } as never);
+    vi.mocked(api.get).mockResolvedValue({
+      data: [
+        {
+          id: 'scenario-tags',
+          name: 'Tagged Scenario',
+          description: 'Has tags',
+          phases: [{ name: 'Phase 1', techniques: ['T1082'] }],
+          tags: ['discovery', 'safe', 'windows'],
+        },
+      ],
+    } as never);
+
+    renderWithClient(<Executions />);
+
+    await screen.findByText('New Execution');
+    fireEvent.click(screen.getByText('New Execution'));
+
+    await waitFor(() => {
+      expect(screen.getByText('discovery')).toBeInTheDocument();
+      expect(screen.getByText('safe')).toBeInTheDocument();
+      expect(screen.getByText('windows')).toBeInTheDocument();
+    });
   });
 });

@@ -5,14 +5,17 @@ import {
   DocumentTextIcon,
   ArrowDownTrayIcon,
   ArrowUpTrayIcon,
-  XMarkIcon,
   ExclamationTriangleIcon,
   CheckCircleIcon,
+  PlusIcon,
+  TrashIcon,
+  XMarkIcon,
 } from '@heroicons/react/24/outline';
 import { api, executionApi, scenarioApi, ImportScenariosRequest, ScenarioPhase } from '../lib/api';
-import { Scenario } from '../types';
+import { Scenario, Technique } from '../types';
 import { LoadingState } from '../components/LoadingState';
 import { EmptyState } from '../components/EmptyState';
+import { Modal } from '../components/Modal';
 import { RunExecutionModal } from '../components/RunExecutionModal';
 import toast from 'react-hot-toast';
 
@@ -54,15 +57,42 @@ export default function Scenarios() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [scenarioToRun, setScenarioToRun] = useState<Scenario | null>(null);
   const [showImportModal, setShowImportModal] = useState(false);
+  const [showCreateModal, setShowCreateModal] = useState(false);
   const [importResult, setImportResult] = useState<{
     imported: number;
     failed: number;
     errors?: string[];
   } | null>(null);
 
+  // Phase counter for generating unique IDs
+  const [phaseIdCounter, setPhaseIdCounter] = useState(1);
+
+  // Create scenario form initial state
+  const createInitialPhase = (id: number) => ({ id: `phase-${id}`, name: `Phase ${id}`, techniques: [] as string[] });
+  const initialScenarioForm = {
+    name: '',
+    description: '',
+    tags: '',
+    phases: [createInitialPhase(1)],
+  };
+
+  // Create scenario form state
+  const [newScenario, setNewScenario] = useState(initialScenarioForm);
+
+  // Reset form helper
+  const resetCreateForm = () => {
+    setPhaseIdCounter(1);
+    setNewScenario({ ...initialScenarioForm, phases: [createInitialPhase(1)] });
+  };
+
   const { data: scenarios, isLoading } = useQuery<Scenario[]>({
     queryKey: ['scenarios'],
     queryFn: () => api.get('/scenarios').then(res => res.data),
+  });
+
+  const { data: techniques } = useQuery<Technique[]>({
+    queryKey: ['techniques'],
+    queryFn: () => api.get('/techniques').then(res => res.data),
   });
 
   const startMutation = useMutation({
@@ -103,6 +133,19 @@ export default function Scenarios() {
           errors: data.errors,
         });
       }
+    },
+  });
+
+  const createMutation = useMutation({
+    mutationFn: (data: Omit<Scenario, 'id'>) => scenarioApi.create(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['scenarios'] });
+      toast.success('Scenario created successfully');
+      setShowCreateModal(false);
+      resetCreateForm();
+    },
+    onError: (error: { response?: { data?: { error?: string } } }) => {
+      toast.error(error.response?.data?.error || 'Failed to create scenario');
     },
   });
 
@@ -188,6 +231,81 @@ export default function Scenarios() {
     setImportResult(null);
   };
 
+  const handleCreateClick = () => {
+    resetCreateForm();
+    setShowCreateModal(true);
+  };
+
+  const handleCloseCreateModal = () => {
+    setShowCreateModal(false);
+    resetCreateForm();
+  };
+
+  const handleAddPhase = () => {
+    const newId = phaseIdCounter + 1;
+    setPhaseIdCounter(newId);
+    setNewScenario(prev => ({
+      ...prev,
+      phases: [...prev.phases, createInitialPhase(newId)],
+    }));
+  };
+
+  const handleRemovePhase = (index: number) => {
+    setNewScenario(prev => ({
+      ...prev,
+      phases: prev.phases.filter((_, i) => i !== index),
+    }));
+  };
+
+  const handlePhaseNameChange = (index: number, name: string) => {
+    setNewScenario(prev => ({
+      ...prev,
+      phases: prev.phases.map((p, i) => (i === index ? { ...p, name } : p)),
+    }));
+  };
+
+  const toggleTechniqueInPhase = (
+    phase: { id: string; name: string; techniques: string[] },
+    techniqueId: string
+  ): { id: string; name: string; techniques: string[] } => {
+    const hasTechnique = phase.techniques.includes(techniqueId);
+    const updatedTechniques = hasTechnique
+      ? phase.techniques.filter(t => t !== techniqueId)
+      : [...phase.techniques, techniqueId];
+    return { ...phase, techniques: updatedTechniques };
+  };
+
+  const handleTechniqueToggle = (phaseIndex: number, techniqueId: string) => {
+    setNewScenario(prev => ({
+      ...prev,
+      phases: prev.phases.map((p, i) =>
+        i === phaseIndex ? toggleTechniqueInPhase(p, techniqueId) : p
+      ),
+    }));
+  };
+
+  const handleCreateSubmit = () => {
+    if (!newScenario.name.trim()) {
+      toast.error('Scenario name is required');
+      return;
+    }
+    if (newScenario.phases.every(p => p.techniques.length === 0)) {
+      toast.error('At least one technique is required');
+      return;
+    }
+
+    createMutation.mutate({
+      name: newScenario.name,
+      description: newScenario.description,
+      tags: newScenario.tags.split(',').map(t => t.trim()).filter(Boolean),
+      phases: newScenario.phases.map((p, i) => ({
+        name: p.name,
+        techniques: p.techniques,
+        order: i + 1,
+      })),
+    });
+  };
+
   if (isLoading) {
     return <LoadingState message="Loading scenarios..." />;
   }
@@ -212,7 +330,10 @@ export default function Scenarios() {
             <ArrowDownTrayIcon className="h-5 w-5" />
             Export
           </button>
-          <button className="btn-primary">Create Scenario</button>
+          <button onClick={handleCreateClick} className="btn-primary flex items-center gap-2">
+            <PlusIcon className="h-5 w-5" />
+            Create Scenario
+          </button>
         </div>
       </div>
 
@@ -291,85 +412,197 @@ export default function Scenarios() {
 
       {/* Import Modal */}
       {showImportModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl shadow-xl max-w-md w-full mx-4">
-            <div className="flex items-center justify-between p-6 border-b">
-              <h2 className="text-xl font-semibold">Import Scenarios</h2>
+        <Modal
+          title="Import Scenarios"
+          onClose={closeImportModal}
+          footer={importResult ? (
+            <>
+              <button onClick={() => setImportResult(null)} className="btn-secondary">Import More</button>
+              <button onClick={closeImportModal} className="btn-primary">Done</button>
+            </>
+          ) : undefined}
+        >
+          {importResult ? (
+            <div className="space-y-4">
+              <div className="flex items-center gap-3">
+                <ImportResultIcon importResult={importResult} />
+                <div>
+                  <p className="font-medium"><ImportResultTitle importResult={importResult} /></p>
+                  <p className="text-sm text-gray-600">{importResult.imported} imported, {importResult.failed} failed</p>
+                </div>
+              </div>
+              {importResult.errors && importResult.errors.length > 0 && (
+                <div className="bg-red-50 border border-red-200 rounded-lg p-3 max-h-40 overflow-y-auto">
+                  <p className="text-sm font-medium text-red-700 mb-2">Errors:</p>
+                  <ul className="text-xs text-red-600 space-y-1">
+                    {importResult.errors.map((error, idx) => (
+                      <li key={`error-${idx}-${error.slice(0, 20)}`}>{error}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <p className="text-sm text-gray-600">
+                Upload a JSON file containing scenarios to import. The file should be in AutoStrike export format.
+              </p>
               <button
-                onClick={closeImportModal}
+                type="button"
+                className="w-full border-2 border-dashed border-gray-300 rounded-lg p-8 text-center cursor-pointer hover:border-primary-500 transition-colors bg-transparent"
+                onClick={() => fileInputRef.current?.click()}
+              >
+                <ArrowUpTrayIcon className="h-10 w-10 mx-auto text-gray-400 mb-3" />
+                <p className="text-sm text-gray-600">Click to select a JSON file</p>
+                <p className="text-xs text-gray-400 mt-1">or drag and drop</p>
+              </button>
+              {importMutation.isPending && (
+                <div className="flex items-center justify-center gap-2 text-gray-600">
+                  <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                  </svg>
+                  <span>Importing...</span>
+                </div>
+              )}
+            </div>
+          )}
+        </Modal>
+      )}
+
+      {/* Create Scenario Modal */}
+      {showCreateModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-xl max-w-4xl w-full mx-4 max-h-[90vh] overflow-hidden flex flex-col">
+            <div className="flex items-center justify-between p-6 border-b">
+              <h2 className="text-xl font-semibold">Create Scenario</h2>
+              <button
+                onClick={handleCloseCreateModal}
                 className="p-2 hover:bg-gray-100 rounded-lg"
               >
                 <XMarkIcon className="h-5 w-5" />
               </button>
             </div>
-            <div className="p-6">
-              {importResult ? (
-                <div className="space-y-4">
-                  {/* Import Results */}
-                  <div className="flex items-center gap-3">
-                    <ImportResultIcon importResult={importResult} />
-                    <div>
-                      <p className="font-medium">
-                        <ImportResultTitle importResult={importResult} />
-                      </p>
-                      <p className="text-sm text-gray-600">
-                        {importResult.imported} imported, {importResult.failed} failed
-                      </p>
-                    </div>
+            <div className="p-6 overflow-y-auto flex-1">
+              <div className="space-y-6">
+                {/* Name & Description */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label htmlFor="scenario-name" className="block text-sm font-medium text-gray-700 mb-1">Name *</label>
+                    <input
+                      id="scenario-name"
+                      type="text"
+                      value={newScenario.name}
+                      onChange={(e) => setNewScenario(prev => ({ ...prev, name: e.target.value }))}
+                      className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                      placeholder="My Attack Scenario"
+                    />
                   </div>
+                  <div>
+                    <label htmlFor="scenario-tags" className="block text-sm font-medium text-gray-700 mb-1">Tags (comma-separated)</label>
+                    <input
+                      id="scenario-tags"
+                      type="text"
+                      value={newScenario.tags}
+                      onChange={(e) => setNewScenario(prev => ({ ...prev, tags: e.target.value }))}
+                      className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                      placeholder="discovery, safe, windows"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label htmlFor="scenario-description" className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                  <textarea
+                    id="scenario-description"
+                    value={newScenario.description}
+                    onChange={(e) => setNewScenario(prev => ({ ...prev, description: e.target.value }))}
+                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                    rows={2}
+                    placeholder="Describe the purpose of this scenario..."
+                  />
+                </div>
 
-                  {importResult.errors && importResult.errors.length > 0 && (
-                    <div className="bg-red-50 border border-red-200 rounded-lg p-3 max-h-40 overflow-y-auto">
-                      <p className="text-sm font-medium text-red-700 mb-2">Errors:</p>
-                      <ul className="text-xs text-red-600 space-y-1">
-                        {importResult.errors.map((error, idx) => (
-                          <li key={`error-${idx}-${error.slice(0, 20)}`}>{error}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-
-                  <div className="flex justify-end gap-3">
+                {/* Phases */}
+                <div>
+                  <div className="flex justify-between items-center mb-3">
+                    <span className="block text-sm font-medium text-gray-700">Phases</span>
                     <button
-                      onClick={() => setImportResult(null)}
-                      className="btn-secondary"
+                      type="button"
+                      onClick={handleAddPhase}
+                      className="text-sm text-primary-600 hover:text-primary-700 flex items-center gap-1"
                     >
-                      Import More
-                    </button>
-                    <button onClick={closeImportModal} className="btn-primary">
-                      Done
+                      <PlusIcon className="h-4 w-4" /> Add Phase
                     </button>
                   </div>
+                  <div className="space-y-4">
+                    {newScenario.phases.map((phase, phaseIndex) => (
+                      <div key={phase.id} className="border rounded-lg p-4">
+                        <div className="flex justify-between items-center mb-3">
+                          <label className="sr-only" htmlFor={`phase-name-${phase.id}`}>Phase name</label>
+                          <input
+                            id={`phase-name-${phase.id}`}
+                            type="text"
+                            value={phase.name}
+                            onChange={(e) => handlePhaseNameChange(phaseIndex, e.target.value)}
+                            className="font-medium px-2 py-1 border rounded focus:ring-2 focus:ring-primary-500"
+                          />
+                          {newScenario.phases.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => handleRemovePhase(phaseIndex)}
+                              className="text-red-500 hover:text-red-700"
+                              aria-label={`Remove ${phase.name}`}
+                            >
+                              <TrashIcon className="h-5 w-5" />
+                            </button>
+                          )}
+                        </div>
+                        <div className="grid grid-cols-2 md:grid-cols-3 gap-2 max-h-48 overflow-y-auto">
+                          {techniques?.map((technique) => (
+                            <label
+                              key={technique.id}
+                              aria-label={`Select technique ${technique.id} ${technique.name}`}
+                              className={`flex items-center gap-2 p-2 border rounded cursor-pointer hover:bg-gray-50 ${
+                                phase.techniques.includes(technique.id) ? 'border-primary-500 bg-primary-50' : ''
+                              }`}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={phase.techniques.includes(technique.id)}
+                                onChange={() => handleTechniqueToggle(phaseIndex, technique.id)}
+                                className="rounded text-primary-600 focus:ring-primary-500"
+                                aria-label={`${technique.id} ${technique.name}`}
+                              />
+                              <span className="text-sm truncate" aria-hidden="true">
+                                <span className="font-mono text-xs text-gray-500">{technique.id}</span>
+                                <span className="ml-1">{technique.name}</span>
+                              </span>
+                            </label>
+                          ))}
+                        </div>
+                        <p className="text-xs text-gray-500 mt-2">
+                          {phase.techniques.length} technique(s) selected
+                        </p>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-              ) : (
-                <div className="space-y-4">
-                  <p className="text-sm text-gray-600">
-                    Upload a JSON file containing scenarios to import. The file should be in AutoStrike export format.
-                  </p>
-                  <button
-                    type="button"
-                    className="w-full border-2 border-dashed border-gray-300 rounded-lg p-8 text-center cursor-pointer hover:border-primary-500 transition-colors bg-transparent"
-                    onClick={() => fileInputRef.current?.click()}
-                  >
-                    <ArrowUpTrayIcon className="h-10 w-10 mx-auto text-gray-400 mb-3" />
-                    <p className="text-sm text-gray-600">
-                      Click to select a JSON file
-                    </p>
-                    <p className="text-xs text-gray-400 mt-1">
-                      or drag and drop
-                    </p>
-                  </button>
-                  {importMutation.isPending && (
-                    <div className="flex items-center justify-center gap-2 text-gray-600">
-                      <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                      </svg>
-                      <span>Importing...</span>
-                    </div>
-                  )}
-                </div>
-              )}
+              </div>
+            </div>
+            <div className="flex justify-end gap-3 p-6 border-t">
+              <button
+                onClick={handleCloseCreateModal}
+                className="btn-secondary"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleCreateSubmit}
+                disabled={createMutation.isPending}
+                className="btn-primary"
+              >
+                {createMutation.isPending ? 'Creating...' : 'Create Scenario'}
+              </button>
             </div>
           </div>
         </div>

@@ -7,7 +7,6 @@ import {
   TrashIcon,
   ArrowPathIcon,
   KeyIcon,
-  XMarkIcon,
   CheckIcon,
   ExclamationTriangleIcon,
 } from '@heroicons/react/24/outline';
@@ -23,6 +22,7 @@ import {
 } from '../../lib/api';
 import { LoadingState } from '../../components/LoadingState';
 import { EmptyState } from '../../components/EmptyState';
+import { Modal } from '../../components/Modal';
 import { useAuth } from '../../contexts/AuthContext';
 
 const ROLES: { value: UserRole; label: string; description: string }[] = [
@@ -638,30 +638,6 @@ export default function Users() {
   );
 }
 
-// Modal Component
-function Modal({
-  title,
-  children,
-  onClose,
-}: {
-  readonly title: string;
-  readonly children: React.ReactNode;
-  readonly onClose: () => void;
-}) {
-  return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-xl shadow-xl max-w-md w-full mx-4">
-        <div className="flex items-center justify-between p-6 border-b">
-          <h2 className="text-xl font-semibold">{title}</h2>
-          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg">
-            <XMarkIcon className="h-5 w-5" />
-          </button>
-        </div>
-        <div className="p-6">{children}</div>
-      </div>
-    </div>
-  );
-}
 
 // Error Alert Component
 function ErrorAlert({ message }: { readonly message: string }) {

@@ -427,14 +427,28 @@ type mockTechniqueRepo struct {
 	techniques map[string]*entity.Technique
 	findErr    error
 	importErr  error
+	createErr  error
+	updateErr  error
 }
 
 func newMockTechniqueRepo() *mockTechniqueRepo {
 	return &mockTechniqueRepo{techniques: make(map[string]*entity.Technique)}
 }
 
-func (m *mockTechniqueRepo) Create(ctx context.Context, t *entity.Technique) error  { return nil }
-func (m *mockTechniqueRepo) Update(ctx context.Context, t *entity.Technique) error  { return nil }
+func (m *mockTechniqueRepo) Create(ctx context.Context, t *entity.Technique) error {
+	if m.createErr != nil {
+		return m.createErr
+	}
+	m.techniques[t.ID] = t
+	return nil
+}
+func (m *mockTechniqueRepo) Update(ctx context.Context, t *entity.Technique) error {
+	if m.updateErr != nil {
+		return m.updateErr
+	}
+	m.techniques[t.ID] = t
+	return nil
+}
 func (m *mockTechniqueRepo) Delete(ctx context.Context, id string) error            { return nil }
 func (m *mockTechniqueRepo) FindByID(ctx context.Context, id string) (*entity.Technique, error) {
 	if m.findErr != nil {
@@ -1604,4 +1618,243 @@ func TestExecutionHandler_StopExecution_WithHub(t *testing.T) {
 	}
 
 	time.Sleep(10 * time.Millisecond)
+}
+
+// ImportTechniquesJSON Tests
+func TestTechniqueHandler_ImportTechniquesJSON_Success(t *testing.T) {
+	repo := newMockTechniqueRepo()
+	svc := application.NewTechniqueService(repo)
+	handler := NewTechniqueHandler(svc)
+
+	router := gin.New()
+	router.POST("/techniques/import/json", handler.ImportTechniquesJSON)
+
+	body := ImportJSONRequest{
+		Techniques: []*entity.Technique{
+			{ID: "T1082", Name: "System Info Discovery", Tactic: entity.TacticDiscovery, Platforms: []string{"windows", "linux"}},
+			{ID: "T1083", Name: "File Discovery", Tactic: entity.TacticDiscovery, Platforms: []string{"windows"}},
+		},
+	}
+	jsonBody, _ := json.Marshal(body)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("POST", "/techniques/import/json", bytes.NewBuffer(jsonBody))
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("Expected status 200, got %d", w.Code)
+	}
+
+	var response ImportJSONResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+		t.Fatalf("Failed to parse response: %v", err)
+	}
+
+	if response.Imported != 2 {
+		t.Errorf("Expected 2 imported, got %d", response.Imported)
+	}
+	if response.Failed != 0 {
+		t.Errorf("Expected 0 failed, got %d", response.Failed)
+	}
+}
+
+func TestTechniqueHandler_ImportTechniquesJSON_BadRequest(t *testing.T) {
+	repo := newMockTechniqueRepo()
+	svc := application.NewTechniqueService(repo)
+	handler := NewTechniqueHandler(svc)
+
+	router := gin.New()
+	router.POST("/techniques/import/json", handler.ImportTechniquesJSON)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("POST", "/techniques/import/json", bytes.NewBufferString("invalid json"))
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("Expected status 400, got %d", w.Code)
+	}
+}
+
+func TestTechniqueHandler_ImportTechniquesJSON_CreateFailsUpdateSucceeds(t *testing.T) {
+	repo := newMockTechniqueRepo()
+	// Pre-populate with existing technique
+	repo.techniques["T1082"] = &entity.Technique{ID: "T1082", Name: "Old Name"}
+	repo.createErr = errors.New("technique already exists")
+	svc := application.NewTechniqueService(repo)
+	handler := NewTechniqueHandler(svc)
+
+	router := gin.New()
+	router.POST("/techniques/import/json", handler.ImportTechniquesJSON)
+
+	body := ImportJSONRequest{
+		Techniques: []*entity.Technique{
+			{ID: "T1082", Name: "Updated Name", Tactic: entity.TacticDiscovery, Platforms: []string{"windows"}},
+		},
+	}
+	jsonBody, _ := json.Marshal(body)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("POST", "/techniques/import/json", bytes.NewBuffer(jsonBody))
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("Expected status 200, got %d", w.Code)
+	}
+
+	var response ImportJSONResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+		t.Fatalf("Failed to parse response: %v", err)
+	}
+
+	if response.Imported != 1 {
+		t.Errorf("Expected 1 imported (via update), got %d", response.Imported)
+	}
+	if response.Failed != 0 {
+		t.Errorf("Expected 0 failed, got %d", response.Failed)
+	}
+}
+
+func TestTechniqueHandler_ImportTechniquesJSON_BothFail(t *testing.T) {
+	repo := newMockTechniqueRepo()
+	repo.createErr = errors.New("create failed")
+	repo.updateErr = errors.New("update failed")
+	svc := application.NewTechniqueService(repo)
+	handler := NewTechniqueHandler(svc)
+
+	router := gin.New()
+	router.POST("/techniques/import/json", handler.ImportTechniquesJSON)
+
+	body := ImportJSONRequest{
+		Techniques: []*entity.Technique{
+			{ID: "T1082", Name: "Test", Tactic: entity.TacticDiscovery, Platforms: []string{"windows"}},
+		},
+	}
+	jsonBody, _ := json.Marshal(body)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("POST", "/techniques/import/json", bytes.NewBuffer(jsonBody))
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("Expected status 200, got %d", w.Code)
+	}
+
+	var response ImportJSONResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+		t.Fatalf("Failed to parse response: %v", err)
+	}
+
+	if response.Imported != 0 {
+		t.Errorf("Expected 0 imported, got %d", response.Imported)
+	}
+	if response.Failed != 1 {
+		t.Errorf("Expected 1 failed, got %d", response.Failed)
+	}
+	if len(response.Errors) != 1 {
+		t.Errorf("Expected 1 error, got %d", len(response.Errors))
+	}
+}
+
+func TestTechniqueHandler_ImportTechniquesJSON_PartialSuccess(t *testing.T) {
+	repo := newMockTechniqueRepo()
+	svc := application.NewTechniqueService(repo)
+	handler := NewTechniqueHandler(svc)
+
+	router := gin.New()
+	router.POST("/techniques/import/json", handler.ImportTechniquesJSON)
+
+	body := ImportJSONRequest{
+		Techniques: []*entity.Technique{
+			{ID: "T1082", Name: "System Info", Tactic: entity.TacticDiscovery, Platforms: []string{"windows"}},
+			{ID: "T1083", Name: "File Discovery", Tactic: entity.TacticDiscovery, Platforms: []string{"linux"}},
+			{ID: "T1057", Name: "Process Discovery", Tactic: entity.TacticDiscovery, Platforms: []string{"windows", "linux"}},
+		},
+	}
+	jsonBody, _ := json.Marshal(body)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("POST", "/techniques/import/json", bytes.NewBuffer(jsonBody))
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("Expected status 200, got %d", w.Code)
+	}
+
+	var response ImportJSONResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+		t.Fatalf("Failed to parse response: %v", err)
+	}
+
+	if response.Imported != 3 {
+		t.Errorf("Expected 3 imported, got %d", response.Imported)
+	}
+	if response.Failed != 0 {
+		t.Errorf("Expected 0 failed, got %d", response.Failed)
+	}
+}
+
+func TestTechniqueHandler_ImportTechniquesJSON_EmptyTechniques(t *testing.T) {
+	repo := newMockTechniqueRepo()
+	svc := application.NewTechniqueService(repo)
+	handler := NewTechniqueHandler(svc)
+
+	router := gin.New()
+	router.POST("/techniques/import/json", handler.ImportTechniquesJSON)
+
+	body := ImportJSONRequest{
+		Techniques: []*entity.Technique{},
+	}
+	jsonBody, _ := json.Marshal(body)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("POST", "/techniques/import/json", bytes.NewBuffer(jsonBody))
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(w, req)
+
+	// Empty array should still return 200 with 0 imported
+	if w.Code != http.StatusOK {
+		t.Errorf("Expected status 200, got %d", w.Code)
+	}
+
+	var response ImportJSONResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+		t.Fatalf("Failed to parse response: %v", err)
+	}
+
+	if response.Imported != 0 {
+		t.Errorf("Expected 0 imported, got %d", response.Imported)
+	}
+}
+
+func TestImportJSONRequest_Struct(t *testing.T) {
+	req := ImportJSONRequest{
+		Techniques: []*entity.Technique{
+			{ID: "T1082", Name: "Test"},
+		},
+	}
+	if len(req.Techniques) != 1 {
+		t.Errorf("Expected 1 technique, got %d", len(req.Techniques))
+	}
+}
+
+func TestImportJSONResponse_Struct(t *testing.T) {
+	resp := ImportJSONResponse{
+		Imported: 5,
+		Failed:   2,
+		Errors:   []string{"error1", "error2"},
+	}
+	if resp.Imported != 5 {
+		t.Errorf("Expected Imported=5, got %d", resp.Imported)
+	}
+	if resp.Failed != 2 {
+		t.Errorf("Expected Failed=2, got %d", resp.Failed)
+	}
+	if len(resp.Errors) != 2 {
+		t.Errorf("Expected 2 errors, got %d", len(resp.Errors))
+	}
 }

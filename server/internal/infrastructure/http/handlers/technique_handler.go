@@ -29,6 +29,7 @@ func (h *TechniqueHandler) RegisterRoutes(r *gin.RouterGroup) {
 		techniques.GET("/platform/:platform", h.GetByPlatform)
 		techniques.GET("/coverage", h.GetCoverage)
 		techniques.POST("/import", h.ImportTechniques)
+		techniques.POST("/import/json", h.ImportTechniquesJSON)
 	}
 }
 
@@ -124,4 +125,49 @@ func (h *TechniqueHandler) ImportTechniques(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"status": "imported"})
+}
+
+// ImportJSONRequest represents the request body for importing techniques from JSON
+type ImportJSONRequest struct {
+	Techniques []*entity.Technique `json:"techniques" binding:"required"`
+}
+
+// ImportJSONResponse represents the response for JSON import
+type ImportJSONResponse struct {
+	Imported int      `json:"imported"`
+	Failed   int      `json:"failed"`
+	Errors   []string `json:"errors,omitempty"`
+}
+
+// ImportTechniquesJSON imports techniques directly from JSON request body
+func (h *TechniqueHandler) ImportTechniquesJSON(c *gin.Context) {
+	var req ImportJSONRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	imported := 0
+	failed := 0
+	var errors []string
+
+	for _, t := range req.Techniques {
+		if err := h.service.CreateTechnique(c.Request.Context(), t); err != nil {
+			// Try update if create fails (technique already exists)
+			if err := h.service.UpdateTechnique(c.Request.Context(), t); err != nil {
+				failed++
+				errors = append(errors, "Failed to import "+t.ID+": "+err.Error())
+			} else {
+				imported++
+			}
+		} else {
+			imported++
+		}
+	}
+
+	c.JSON(http.StatusOK, ImportJSONResponse{
+		Imported: imported,
+		Failed:   failed,
+		Errors:   errors,
+	})
 }

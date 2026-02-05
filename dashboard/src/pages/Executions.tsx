@@ -2,11 +2,13 @@ import { useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { PlayIcon, StopIcon, XMarkIcon } from '@heroicons/react/24/outline';
-import { executionApi } from '../lib/api';
+import { executionApi, api } from '../lib/api';
 import { formatDistanceToNow } from 'date-fns';
-import { Execution, ExecutionStatus } from '../types';
+import { Execution, ExecutionStatus, Scenario } from '../types';
 import { LoadingState } from '../components/LoadingState';
 import { EmptyState } from '../components/EmptyState';
+import { Modal } from '../components/Modal';
+import { RunExecutionModal } from '../components/RunExecutionModal';
 import { useWebSocket, WebSocketMessage } from '../hooks/useWebSocket';
 import toast from 'react-hot-toast';
 
@@ -104,6 +106,80 @@ function StopConfirmModal({ execution, onConfirm, onCancel, isLoading }: Readonl
 }
 
 /**
+ * Scenario Selection Modal for new executions
+ */
+interface ScenarioSelectModalProps {
+  readonly scenarios: Scenario[] | undefined;
+  readonly isLoading: boolean;
+  readonly onSelect: (scenario: Scenario) => void;
+  readonly onCancel: () => void;
+}
+
+/**
+ * Renders the content of the scenario selection modal based on loading state and scenarios.
+ */
+function ScenarioSelectContent({
+  scenarios,
+  isLoading,
+  onSelect,
+}: {
+  readonly scenarios: Scenario[] | undefined;
+  readonly isLoading: boolean;
+  readonly onSelect: (scenario: Scenario) => void;
+}) {
+  if (isLoading) {
+    return (
+      <div className="flex justify-center py-8">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
+      </div>
+    );
+  }
+
+  if (!scenarios || scenarios.length === 0) {
+    return (
+      <p className="text-gray-500 text-center py-8">No scenarios available. Create a scenario first.</p>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      {scenarios.map((scenario) => (
+        <button
+          key={scenario.id}
+          onClick={() => onSelect(scenario)}
+          className="w-full text-left p-4 border rounded-lg hover:border-primary-500 hover:bg-primary-50 transition-colors"
+        >
+          <div className="flex justify-between items-start">
+            <div>
+              <h3 className="font-semibold">{scenario.name}</h3>
+              <p className="text-sm text-gray-500 mt-1">{scenario.description}</p>
+            </div>
+            <span className="text-xs text-gray-400">
+              {scenario.phases.length} phases
+            </span>
+          </div>
+          <div className="mt-2 flex gap-1 flex-wrap">
+            {scenario.tags?.map((tag) => (
+              <span key={tag} className="badge bg-gray-100 text-gray-700 text-xs">
+                {tag}
+              </span>
+            ))}
+          </div>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function ScenarioSelectModal({ scenarios, isLoading, onSelect, onCancel }: Readonly<ScenarioSelectModalProps>) {
+  return (
+    <Modal title="Select Scenario" onClose={onCancel} maxWidth="max-w-2xl">
+      <ScenarioSelectContent scenarios={scenarios} isLoading={isLoading} onSelect={onSelect} />
+    </Modal>
+  );
+}
+
+/**
  * Executions page component.
  * Displays a table of scenario executions with their results and scores.
  *
@@ -113,6 +189,8 @@ export default function Executions() {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const [executionToStop, setExecutionToStop] = useState<Execution | null>(null);
+  const [showScenarioSelect, setShowScenarioSelect] = useState(false);
+  const [scenarioToRun, setScenarioToRun] = useState<Scenario | null>(null);
 
   // Handle WebSocket messages for real-time updates
   const handleWebSocketMessage = useCallback((message: WebSocketMessage) => {
@@ -135,6 +213,11 @@ export default function Executions() {
     refetchInterval: 5000, // Fallback polling every 5 seconds
   });
 
+  const { data: scenarios, isLoading: isScenariosLoading } = useQuery<Scenario[]>({
+    queryKey: ['scenarios'],
+    queryFn: () => api.get('/scenarios').then(res => res.data),
+  });
+
   // Mutation for stopping an execution
   const stopMutation = useMutation({
     mutationFn: (executionId: string) => executionApi.stop(executionId),
@@ -146,12 +229,27 @@ export default function Executions() {
     onError: (error: { response?: { data?: { error?: string }; status?: number } }) => {
       const message = error.response?.data?.error || 'Failed to stop execution';
       toast.error(message);
-      setExecutionToStop(null); // Close modal on error
+      setExecutionToStop(null);
+    },
+  });
+
+  // Mutation for starting an execution
+  const startMutation = useMutation({
+    mutationFn: ({ scenarioId, agentPaws, safeMode }: { scenarioId: string; agentPaws: string[]; safeMode: boolean }) =>
+      executionApi.start(scenarioId, agentPaws, safeMode),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['executions'] });
+      toast.success('Execution started successfully');
+      setScenarioToRun(null);
+    },
+    onError: (error: { response?: { data?: { error?: string } } }) => {
+      const message = error.response?.data?.error || 'Failed to start execution';
+      toast.error(message);
     },
   });
 
   const handleStopClick = (execution: Execution, e: React.MouseEvent) => {
-    e.stopPropagation(); // Prevent row click
+    e.stopPropagation();
     setExecutionToStop(execution);
   };
 
@@ -165,6 +263,29 @@ export default function Executions() {
     setExecutionToStop(null);
   };
 
+  const handleNewExecution = () => {
+    setShowScenarioSelect(true);
+  };
+
+  const handleScenarioSelect = (scenario: Scenario) => {
+    setShowScenarioSelect(false);
+    setScenarioToRun(scenario);
+  };
+
+  const handleConfirmRun = (agentPaws: string[], safeMode: boolean) => {
+    if (scenarioToRun) {
+      startMutation.mutate({
+        scenarioId: scenarioToRun.id,
+        agentPaws,
+        safeMode,
+      });
+    }
+  };
+
+  const handleCancelRun = () => {
+    setScenarioToRun(null);
+  };
+
   if (isLoading) {
     return <LoadingState message="Loading executions..." />;
   }
@@ -173,7 +294,10 @@ export default function Executions() {
     <div>
       <div className="flex justify-between items-center mb-8">
         <h1 className="text-3xl font-bold">Executions</h1>
-        <button className="btn-primary">New Execution</button>
+        <button onClick={handleNewExecution} className="btn-primary flex items-center gap-2">
+          <PlayIcon className="h-5 w-5" />
+          New Execution
+        </button>
       </div>
 
       <div className="card overflow-hidden">
@@ -284,6 +408,26 @@ export default function Executions() {
           onConfirm={handleConfirmStop}
           onCancel={handleCancelStop}
           isLoading={stopMutation.isPending}
+        />
+      )}
+
+      {/* Scenario Selection Modal */}
+      {showScenarioSelect && (
+        <ScenarioSelectModal
+          scenarios={scenarios}
+          isLoading={isScenariosLoading}
+          onSelect={handleScenarioSelect}
+          onCancel={() => setShowScenarioSelect(false)}
+        />
+      )}
+
+      {/* Run Execution Modal */}
+      {scenarioToRun && (
+        <RunExecutionModal
+          scenario={scenarioToRun}
+          onConfirm={handleConfirmRun}
+          onCancel={handleCancelRun}
+          isLoading={startMutation.isPending}
         />
       )}
     </div>
