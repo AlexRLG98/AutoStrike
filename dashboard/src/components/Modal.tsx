@@ -30,8 +30,8 @@ interface ModalProps {
  */
 export function Modal({ title, onClose, children, maxWidth = 'max-w-md', footer }: ModalProps) {
   return (
-    <div className={MODAL_OVERLAY_CLASS}>
-      <div className={`${MODAL_CONTAINER_CLASS} ${maxWidth} w-full mx-4`}>
+    <div className={MODAL_OVERLAY_CLASS} onClick={onClose}>
+      <div className={`${MODAL_CONTAINER_CLASS} ${maxWidth} w-full mx-4`} onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between p-6 border-b">
           <h2 className="text-xl font-semibold">{title}</h2>
           <button

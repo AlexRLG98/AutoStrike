@@ -101,5 +101,19 @@ describe('Modal', () => {
       const contentArea = container.querySelectorAll('.p-6');
       expect(contentArea.length).toBeGreaterThanOrEqual(2); // header + content
     });
+
+    it('calls onClose when clicking overlay', () => {
+      const { container } = render(<Modal {...defaultProps} />);
+      const overlay = container.firstChild as HTMLElement;
+      fireEvent.click(overlay);
+      expect(defaultProps.onClose).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not call onClose when clicking modal content', () => {
+      render(<Modal {...defaultProps} />);
+      const content = screen.getByText('Modal content');
+      fireEvent.click(content);
+      expect(defaultProps.onClose).not.toHaveBeenCalled();
+    });
   });
 });
