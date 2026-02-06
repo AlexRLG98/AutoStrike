@@ -27,7 +27,7 @@ sysinfo = "0.28"
 whoami = "1.4"
 
 # Process execution
-which = "6.0"
+which = "8.0"
 
 # Configuration
 config = "0.11"
