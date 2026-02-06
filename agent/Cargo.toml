@@ -46,7 +46,7 @@ uuid = { version = "1.6", features = ["v4"] }
 winapi = { version = "0.3", features = ["processthreadsapi", "handleapi", "winbase"] }
 
 [target.'cfg(unix)'.dependencies]
-nix = { version = "0.27", features = ["process", "signal"] }
+nix = { version = "0.31", features = ["process", "signal"] }
 
 [profile.release]
 lto = true
